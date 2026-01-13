@@ -1,261 +1,212 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>NFS-e</title>
+    <meta charset="utf-8">
+    <title>Nota Fiscal #{{ $nota->numero ?? $nota->id }}</title>
     <style>
-        @page { margin: 10px; }
-        body {
-            font-family: "Helvetica", Arial, sans-serif;
-            font-size: 8px;
-            color: #000;
-            line-height: 1.1;
-        }
-        table { width: 100%; border-spacing: 0; border-collapse: collapse; margin-bottom: -1px; }
-        td, th { border: 1px solid #000; padding: 2px 4px; vertical-align: top; }
+        body { font-family: sans-serif; font-size: 11px; color: #333; line-height: 1.3; }
+        .container { width: 100%; margin: 0 auto; }
 
-        .no-border { border: none !important; }
-        .b-bottom { border-bottom: 1px solid #000; }
-        .b-right { border-right: 1px solid #000; }
-        .bg-gray { background-color: #e0e0e0; }
+        /* Helpers */
         .text-center { text-align: center; }
         .text-right { text-align: right; }
-        .text-bold { font-weight: bold; }
+        .font-bold { font-weight: bold; }
+        .uppercase { text-transform: uppercase; }
+        .mb-2 { margin-bottom: 5px; }
 
-        .lbl { font-size: 6px; color: #444; display: block; margin-bottom: 1px; text-transform: uppercase; }
-        .val { font-size: 9px; font-weight: bold; display: block; }
-        .val-lg { font-size: 11px; }
-        .val-xl { font-size: 14px; }
-
-        .section-header {
-            background-color: #d9d9d9;
+        /* Estrutura de Caixas */
+        .box { border: 1px solid #999; padding: 5px; margin-bottom: 5px; position: relative; }
+        .box-header {
+            background-color: #eee;
+            border-bottom: 1px solid #999;
+            margin: -5px -5px 5px -5px;
+            padding: 3px 5px;
+            font-size: 9px;
             font-weight: bold;
-            font-size: 8px;
-            padding: 3px;
-            border: 1px solid #000;
-            margin-top: -1px;
-            text-align: center;
             text-transform: uppercase;
         }
+
+        /* Tabelas */
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ccc; padding: 4px; text-align: left; font-size: 10px; }
+        th { background-color: #f9f9f9; font-weight: bold; text-transform: uppercase; }
+
+        /* Marca D'água para Rascunho/Erro */
+        .watermark {
+            position: fixed;
+            top: 35%;
+            left: 10%;
+            width: 80%;
+            text-align: center;
+            font-size: 60px;
+            color: rgba(200, 0, 0, 0.15); /* Vermelho bem claro */
+            transform: rotate(-45deg);
+            z-index: -1000;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        /* Cabeçalho NFS-e */
+        .header-table { width: 100%; border: 1px solid #999; margin-bottom: 5px; }
+        .header-logo { width: 100px; padding: 5px; text-align: center; border-right: 1px solid #999; }
+        .header-info { padding: 5px; text-align: center; }
+        .header-side { width: 140px; background-color: #eee; border-left: 1px solid #999; text-align: center; padding: 5px; }
     </style>
 </head>
 <body>
 
-<table>
-    <tr>
-        <td width="60%" style="vertical-align: top; padding: 5px;">
-            <div style="font-size: 16px; font-weight: bold;">NFSe</div>
-            <div style="font-size: 10px; font-weight: bold;">Nota Fiscal de Serviço eletrônica</div>
-            <br>
-            <div style="font-size: 9px; font-weight: bold;">DANFSe v1.0</div>
-            <div style="font-size: 8px;">Documento Auxiliar da NFS-e</div>
+@if($nota->status !== 'autorizada')
+    <div class="watermark">
+        SEM VALOR FISCAL<br>
+        <span style="font-size: 20px">({{ strtoupper($nota->status) }})</span>
+    </div>
+@endif
 
-            <br><br>
-            <div style="font-weight: bold; font-size: 9px;">Prefeitura Municipal de {{ $xml->infNFSe->xLocEmi }}</div>
-            <div style="font-size: 7px;">Secretaria Municipal de Finanças / Fazenda</div>
-        </td>
+<div class="container">
 
-        <td width="40%" style="padding: 0;">
-            <table class="no-border">
-                <tr>
-                    <td class="no-border b-bottom" style="padding: 4px;">
-                        <span class="lbl">Chave de Acesso da NFS-e</span>
-                        <span class="val" style="letter-spacing: 0.5px; word-break: break-all; font-size: 8px;">
-                                {{ $chaveAcesso }}
-                            </span>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="no-border b-bottom" style="padding: 4px;">
-                        <span class="lbl">Número da NFS-e</span>
-                        <span class="val val-xl text-right">{{ $xml->infNFSe->nNFSe }}</span>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="no-border" style="padding: 4px; text-align: center;">
-                        <span class="lbl" style="text-align: left;">A autenticidade desta NFS-e pode ser verificada pela leitura deste código QR ou pela consulta da chave de acesso no portal nacional da NFS-e</span>
-                        <div style="margin-top: 5px;">
-                            @if($qrCodeBase64)
-                                <img src="{{ $qrCodeBase64 }}" alt="QR Code" style="width: 80px; height: 80px;">
-                            @else
-                                <div style="border: 1px dashed #ccc; width:80px; height:80px; margin:0 auto; padding-top:30px; font-size:8px;">Erro QR</div>
-                            @endif
-                        </div>
-                    </td>
-                </tr>
-            </table>
-        </td>
-    </tr>
-</table>
+    <table class="header-table">
+        <tr>
+            <td class="header-logo">
+                {{-- Coloque sua logo em public/img/logo.png --}}
+                <img src="{{ public_path('img/logo.png') }}" style="max-width: 80px; max-height: 60px;" alt="Logo">
+            </td>
+            <td class="header-info">
+                <div style="font-size: 14px; font-weight: bold;">NOTA FISCAL DE SERVIÇOS ELETRÔNICA - NFS-e</div>
+                <div style="font-size: 10px; margin-top: 5px; color: #555;">
+                    Emissão: <strong>{{ $nota->data_emissao->format('d/m/Y H:i:s') }}</strong><br>
+                    Competência: <strong>{{ $nota->competencia->format('d/m/Y') }}</strong><br>
+                    Código de Verificação: <strong>{{ $nota->codigo_verificacao ?? 'PENDENTE' }}</strong>
+                </div>
+            </td>
+            <td class="header-side">
+                <div style="font-size: 9px; margin-bottom: 5px;">NÚMERO DA NOTA</div>
+                <div style="font-size: 16px; font-weight: bold;">{{ $nota->numero ?? 'PROVISÓRIA' }}</div>
+                <div style="font-size: 9px; margin-top: 5px;">Série: {{ $nota->serie }}</div>
+            </td>
+        </tr>
+    </table>
 
-<table>
-    <tr>
-        <td width="25%"><span class="lbl">Número da DPS</span><span class="val">{{ $xml->infNFSe->DPS->infDPS->nDPS }}</span></td>
-        <td width="25%"><span class="lbl">Série da DPS</span><span class="val">{{ $xml->infNFSe->DPS->infDPS->serie }}</span></td>
-        <td width="25%"><span class="lbl">Data e Hora de emissão da NFS-e</span><span class="val">{{ date('d/m/Y H:i:s', strtotime((string)$xml->infNFSe->dhProc)) }}</span></td>
-        <td width="25%"><span class="lbl">Competência da NFS-e</span><span class="val">{{ date('d/m/Y', strtotime((string)$xml->infNFSe->DPS->infDPS->dCompet)) }}</span></td>
-    </tr>
-</table>
+    <div class="box">
+        <div class="box-header">Prestador de Serviços</div>
+        <table style="width: 100%; border: none;">
+            <tr style="border: none;">
+                <td style="border: none; width: 65%;">
+                    <div style="font-size: 12px; font-weight: bold;">{{ $emitente->razao_social }}</div>
+                    <div>CNPJ: {{ $emitente->cnpj }} &nbsp;|&nbsp; IM: {{ $emitente->inscricao_municipal }}</div>
+                    <div>{{ $emitente->endereco }}, {{ $emitente->numero }} {{ $emitente->complemento }}</div>
+                    <div>{{ $emitente->bairro }} - {{ $emitente->cidade }}/{{ $emitente->uf }}</div>
+                </td>
+                <td style="border: none; vertical-align: top; text-align: right;">
+                    @if($emitente->email) <div>{{ $emitente->email }}</div> @endif
+                    @if($emitente->telefone) <div>Tel: {{ $emitente->telefone }}</div> @endif
+                    <div style="margin-top: 5px; font-weight: bold;">{{ $emitente->regime_tributario }}</div>
+                </td>
+            </tr>
+        </table>
+    </div>
 
-<div class="section-header">EMITENTE DA NFS-e</div>
-<table>
-    <tr>
-        <td colspan="3"><span class="lbl">Prestador do Serviço - Nome / Nome Empresarial</span><span class="val">{{ $xml->infNFSe->emit->xNome }}</span></td>
-        <td width="30%"><span class="lbl">CNPJ / CPF / NIF</span><span class="val">{{ $xml->infNFSe->emit->CNPJ }}</span></td>
-    </tr>
-    <tr>
-        <td colspan="4"><span class="lbl">Endereço</span><span class="val" style="font-weight: normal;">
-                {{ $xml->infNFSe->emit->enderNac->xLgr }}, {{ $xml->infNFSe->emit->enderNac->nro }} - {{ $xml->infNFSe->emit->enderNac->xBairro }}
-            </span></td>
-    </tr>
-    <tr>
-        <td><span class="lbl">Município</span><span class="val">{{ $xml->infNFSe->emit->enderNac->xMun ?? $xml->infNFSe->xLocEmi }} - {{ $xml->infNFSe->emit->enderNac->UF }}</span></td>
-        <td><span class="lbl">CEP</span><span class="val">{{ $xml->infNFSe->emit->enderNac->CEP }}</span></td>
-        <td><span class="lbl">Inscrição Municipal</span><span class="val">{{ $xml->infNFSe->emit->IM }}</span></td>
-        <td><span class="lbl">Telefone</span><span class="val">{{ $xml->infNFSe->emit->fone }}</span></td>
-    </tr>
-    <tr>
-        <td colspan="4"><span class="lbl">E-mail</span><span class="val">{{ $xml->infNFSe->emit->email }}</span></td>
-    </tr>
-</table>
+    <div class="box">
+        <div class="box-header">Tomador de Serviços</div>
+        <div style="padding: 2px;">
+            <span class="font-bold uppercase">{{ $tomador->razao_social }}</span><br>
+            CNPJ/CPF: {{ $tomador->documento }} <br>
+            Endereço: {{ $tomador->endereco }}, {{ $tomador->numero }} {{ $tomador->complemento }} - {{ $tomador->bairro }}<br>
+            Município: {{ $tomador->cidade }}/{{ $tomador->uf }} &nbsp;|&nbsp; CEP: {{ $tomador->cep }}<br>
+            @if($tomador->email) E-mail: {{ $tomador->email }} @endif
+        </div>
+    </div>
 
-<div class="section-header">TOMADOR DO SERVIÇO</div>
-<table>
-    <tr>
-        <td colspan="3"><span class="lbl">Nome / Nome Empresarial</span><span class="val">{{ $tomador->razao_social ?? 'Consumidor Final' }}</span></td>
-        <td width="30%"><span class="lbl">CNPJ / CPF / NIF</span><span class="val">{{ $tomador->documento ?? 'Não Informado' }}</span></td>
-    </tr>
-    <tr>
-        <td colspan="4"><span class="lbl">Endereço</span><span class="val" style="font-weight: normal;">
-                {{ $tomador->endereco }} {{ $tomador->numero }} {{ $tomador->complemento ? '- ' . $tomador->complemento : '' }} - {{ $tomador->bairro }}
-            </span></td>
-    </tr>
-    <tr>
-        <td><span class="lbl">Município</span><span class="val">{{ $tomador->cidade }} - {{ $tomador->uf }}</span></td>
-        <td><span class="lbl">CEP</span><span class="val">{{ $tomador->cep }}</span></td>
-        <td><span class="lbl">Inscrição Municipal</span><span class="val">{{ $tomador->inscricao_municipal }}</span></td>
-        <td><span class="lbl">Telefone</span><span class="val">{{ $tomador->telefone }}</span></td>
-    </tr>
-    <tr>
-        <td colspan="4"><span class="lbl">E-mail</span><span class="val">{{ $tomador->email }}</span></td>
-    </tr>
-</table>
+    <div class="box">
+        <div class="box-header">Discriminação dos Serviços</div>
+        <div style="min-height: 120px; padding: 5px; white-space: pre-wrap; font-size: 11px;">{{ $servico->discriminacao }}</div>
 
-<div class="section-header">INTERMEDIÁRIO DO SERVIÇO</div>
-<table>
-    <tr>
-        <td class="text-center" style="padding: 3px;"><span class="val" style="font-weight: normal;">NÃO IDENTIFICADO NA NFS-e</span></td>
-    </tr>
-</table>
+        <div style="border-top: 1px dashed #ccc; margin-top: 10px; padding-top: 5px; font-size: 9px; color: #555;">
+            Código do Serviço (Municipal): <strong>{{ $servico->item_lista_servico }}</strong> &nbsp;|&nbsp;
+            Código NBS: <strong>{{ $servico->codigo_nbs }}</strong>
+        </div>
+    </div>
 
-<div class="section-header">DADOS DO SERVIÇO</div>
-<table>
-    <tr>
-        <td colspan="2">
-            <span class="lbl">Código de Tributação Municipal</span>
-            <span class="val">{{ $xml->infNFSe->DPS->infDPS->serv->cServ->cTribMun }} - {{ $xml->infNFSe->xTribMun }}</span>
-        </td>
-        <td colspan="2">
-            <span class="lbl">Código de Tributação Nacional</span>
-            <span class="val">{{ $xml->infNFSe->DPS->infDPS->serv->cServ->cTribNac }} - {{ $xml->infNFSe->xTribNac }}</span>
-        </td>
-    </tr>
-    <tr>
-        <td colspan="2">
-            <span class="lbl">País da Prestação</span>
-            <span class="val">Brasil</span>
-        </td>
-        <td colspan="2">
-            <span class="lbl">Município de Incidência do ISSQN</span>
-            <span class="val">{{ $xml->infNFSe->xLocIncid }} - {{ $xml->infNFSe->emit->enderNac->UF }}</span>
-        </td>
-    </tr>
-    <tr>
-        <td colspan="2">
-            <span class="lbl">Local da Prestação</span>
-            <span class="val">{{ $xml->infNFSe->xLocPrestacao }} - {{ $xml->infNFSe->emit->enderNac->UF }}</span>
-        </td>
-        <td colspan="2">
-            <span class="lbl">País Resultado da Prestação</span>
-            <span class="val">-</span>
-        </td>
-    </tr>
-    <tr>
-        <td colspan="4" style="min-height: 80px; padding: 5px;">
-            <div style="font-size: 10px;">
-                {!! nl2br($xml->infNFSe->DPS->infDPS->serv->cServ->xDescServ) !!}
+    <div class="box">
+        <div class="box-header">Detalhamento de Valores</div>
+        <table style="width: 100%;">
+            <thead>
+            <tr>
+                <th class="text-right">Valor do Serviço</th>
+                <th class="text-right">Deduções</th>
+                <th class="text-right">Base de Cálculo</th>
+                <th class="text-right">Alíquota ISS</th>
+                <th class="text-right">Valor do ISS</th>
+                <th class="text-right">Crédito</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td class="text-right">R$ {{ number_format($servico->valor_servico, 2, ',', '.') }}</td>
+                <td class="text-right">R$ {{ number_format($servico->valor_deducoes, 2, ',', '.') }}</td>
+                <td class="text-right">R$ {{ number_format($servico->valor_servico, 2, ',', '.') }}</td>
+                <td class="text-right">{{ number_format($servico->aliquota_iss, 2, ',', '.') }}%</td>
+                <td class="text-right">R$ {{ number_format($servico->valor_iss, 2, ',', '.') }}</td>
+                <td class="text-right">R$ 0,00</td>
+            </tr>
+            </tbody>
+        </table>
+
+        <table style="width: 100%; margin-top: 5px;">
+            <thead>
+            <tr>
+                <th class="text-right">PIS</th>
+                <th class="text-right">COFINS</th>
+                <th class="text-right">INSS</th>
+                <th class="text-right">IR</th>
+                <th class="text-right">CSLL</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td class="text-right">R$ 0,00</td>
+                <td class="text-right">R$ 0,00</td>
+                <td class="text-right">R$ 0,00</td>
+                <td class="text-right">R$ 0,00</td>
+                <td class="text-right">R$ 0,00</td>
+            </tr>
+            </tbody>
+        </table>
+
+        <div style="margin-top: 10px; text-align: right; background-color: #eee; padding: 5px; border: 1px solid #ccc;">
+            <span style="font-size: 10px; font-weight: bold; margin-right: 10px;">VALOR LÍQUIDO DA NOTA:</span>
+            <span style="font-size: 14px; font-weight: bold;">R$ {{ number_format($servico->valor_liquido, 2, ',', '.') }}</span>
+        </div>
+    </div>
+
+    @if($servico->iss_retido == 1)
+        <div style="border: 1px solid #d32f2f; background-color: #ffebee; color: #b71c1c; padding: 5px; font-weight: bold; text-align: center; font-size: 10px; margin-bottom: 5px;">
+            ISS RETIDO PELO TOMADOR - O tomador do serviço é o responsável pelo recolhimento do ISS.
+        </div>
+    @endif
+
+    <div class="box">
+        <div class="box-header">Outras Informações</div>
+        <div style="font-size: 9px; padding: 5px;">
+            {{ $outras_informacoes }} <br>
+            Prestador optante pelo Simples Nacional. Documento emitido por ME ou EPP. <br>
+            Não gera direito a crédito fiscal de IPI.
+        </div>
+    </div>
+
+    @if($qrCodeBase64 && $nota->chave)
+        <div style="margin-top: 15px; text-align: center;">
+            <img src="{{ $qrCodeBase64 }}" style="width: 90px; height: 90px;">
+            <div style="font-size: 9px; margin-top: 5px;">
+                Chave de Acesso:<br>
+                <strong>{{ $nota->chave }}</strong>
             </div>
-        </td>
-    </tr>
-</table>
+        </div>
+    @endif
 
-<div class="section-header">TRIBUTAÇÃO MUNICIPAL</div>
-<table>
-    <tr>
-        <td><span class="lbl">Tributação do ISSQN</span><span class="val">Operação Tributável</span></td>
-        <td><span class="lbl">Tipo de Imunidade</span><span class="val">-</span></td>
-        <td><span class="lbl">Suspensão da Exigibilidade</span><span class="val">Não</span></td>
-        <td><span class="lbl">Retenção do ISSQN</span><span class="val">
-                @if(isset($xml->infNFSe->DPS->infDPS->valores->trib->tribMun->tpRetISSQN) && $xml->infNFSe->DPS->infDPS->valores->trib->tribMun->tpRetISSQN == 1) Não Retido @else Retido @endif
-             </span></td>
-    </tr>
-    <tr>
-        <td><span class="lbl">Valor do Serviço</span><span class="val text-right">R$ {{ number_format((float)$xml->infNFSe->DPS->infDPS->valores->vServPrest->vServ, 2, ',', '.') }}</span></td>
-        <td><span class="lbl">Desconto Incondicionado</span><span class="val text-right">R$ 0,00</span></td>
-        <td><span class="lbl">Total Deduções/Reduções</span><span class="val text-right">R$ 0,00</span></td>
-        <td><span class="lbl">Base de Cálculo ISSQN</span><span class="val text-right">R$ {{ number_format((float)$xml->infNFSe->DPS->infDPS->valores->vServPrest->vServ, 2, ',', '.') }}</span></td>
-    </tr>
-    <tr>
-        <td><span class="lbl">Alíquota Aplicada</span><span class="val text-right">-</span></td>
-        <td><span class="lbl">ISSQN Apurado</span><span class="val text-right">R$ 0,00</span></td>
-        <td><span class="lbl">Valor do ISSQN</span><span class="val text-right">R$ 0,00</span></td>
-        <td><span class="lbl">Desconto Condicionado</span><span class="val text-right">R$ 0,00</span></td>
-    </tr>
-</table>
+    <div style="margin-top: 20px; font-size: 8px; color: #888; text-align: center;">
+        Gerado pelo sistema <strong>G2M Fiscal</strong>
+    </div>
 
-<div class="section-header">TRIBUTAÇÃO FEDERAL</div>
-<table>
-    <tr>
-        <td><span class="lbl">PIS</span><span class="val text-right">R$ 0,00</span></td>
-        <td><span class="lbl">COFINS</span><span class="val text-right">R$ 0,00</span></td>
-        <td><span class="lbl">IRRF</span><span class="val text-right">R$ 0,00</span></td>
-        <td><span class="lbl">INSS</span><span class="val text-right">R$ 0,00</span></td>
-        <td><span class="lbl">CSLL</span><span class="val text-right">R$ 0,00</span></td>
-    </tr>
-    <tr>
-        <td colspan="5">
-            <span class="lbl">Regime de Apuração dos Tributos Federais</span>
-            <span class="val">
-                    Regime de apuração dos tributos federais e municipal pelo Simples Nacional
-                </span>
-        </td>
-    </tr>
-</table>
-
-<div class="section-header">VALOR TOTAL DA NFS-e</div>
-<table>
-    <tr>
-        <td class="text-center" style="padding: 10px; background-color: #f9f9f9;">
-            <span class="val val-xl">R$ {{ number_format((float)$xml->infNFSe->valores->vLiq, 2, ',', '.') }}</span>
-        </td>
-    </tr>
-</table>
-
-<div class="section-header">INFORMAÇÕES ADICIONAIS</div>
-<table>
-    <tr>
-        <td style="padding: 5px;">
-            <span class="lbl">Regime Especial de Tributação</span>
-            <span class="val">Nenhum</span>
-            <br>
-            <span class="lbl">Outras Informações</span>
-            <span class="val" style="font-weight: normal; font-size: 8px;">
-                    Lei da Transparência (Lei 12.741/2012): Tributos Totais Aprox.: R$ 0,00 (0,00%) <br>
-                    Ambiente: {{ $xml->infNFSe->ambGer == 1 ? 'Produção' : 'Homologação' }}
-                </span>
-        </td>
-    </tr>
-</table>
-
+</div>
 </body>
 </html>

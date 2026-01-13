@@ -115,6 +115,7 @@
                             <input type="text" name="cep" id="cep" value="{{ old('cep') }}" required
                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-[#1e676d] focus:ring-[#1e676d] py-2.5"
                                    onblur="consultarCep(this.value)">
+                            @error('cep') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
 
                         <div class="md:col-span-7">
@@ -135,13 +136,20 @@
                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-[#1e676d] focus:ring-[#1e676d] py-2.5">
                         </div>
 
-                        <div class="md:col-span-4">
+                        <div class="md:col-span-3">
                             <label class="block text-sm font-medium text-gray-700 mb-1">Bairro</label>
                             <input type="text" name="bairro" id="bairro" value="{{ old('bairro') }}" required
                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-[#1e676d] focus:ring-[#1e676d] py-2.5 bg-gray-50">
                         </div>
 
-                        <div class="md:col-span-4">
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">UF</label>
+                            <input type="text" name="uf" id="uf" value="{{ old('uf') }}" required maxlength="2"
+                                   class="w-full rounded-lg border-gray-300 shadow-sm focus:border-[#1e676d] focus:ring-[#1e676d] py-2.5 bg-gray-50 text-center uppercase">
+                            @error('uf') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                        </div>
+
+                        <div class="md:col-span-3">
                             <label class="block text-sm font-medium text-gray-700 mb-1">Cód. IBGE Cidade</label>
                             <input type="text" name="cod_ibge_mun" id="cod_ibge_mun" value="{{ old('cod_ibge_mun') }}" required
                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-[#1e676d] focus:ring-[#1e676d] py-2.5 bg-gray-50" readonly>
@@ -213,11 +221,16 @@
                 document.getElementById('nome_fantasia').value = data.nome_fantasia || data.razao_social;
                 document.getElementById('email').value = data.email || '';
                 document.getElementById('telefone').value = data.ddd_telefone_1 || '';
+
                 document.getElementById('cep').value = data.cep;
                 document.getElementById('logradouro').value = data.logradouro;
                 document.getElementById('numero').value = data.numero;
                 document.getElementById('complemento').value = data.complemento;
                 document.getElementById('bairro').value = data.bairro;
+
+                // Preenche o novo campo UF
+                document.getElementById('uf').value = data.uf;
+
                 document.getElementById('cod_ibge_mun').value = data.codigo_municipio_ibge;
             })
             .catch(err => console.error(err))
@@ -233,6 +246,8 @@
                 if (data.errors) return;
                 document.getElementById('logradouro').value = data.street;
                 document.getElementById('bairro').value = data.neighborhood;
+                // Preenche o novo campo UF via CEP também
+                document.getElementById('uf').value = data.state;
             });
     }
 </script>

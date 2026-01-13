@@ -13,24 +13,15 @@ class Servico extends Model
         'empresa_id',
         'nome',
         'codigo_interno',
-        'codigo_tributacao_nacional',
-        'codigo_tributacao_municipal',
+        'codigo_tributacao_nacional', // Ex: 1.03.01
+        'codigo_tributacao_municipal', // Ex: 1234
         'codigo_nbs',
         'descricao',
         'valor_unitario',
-        'iss_retido',
-        'aliquota_iss',
-        'aliquota_pis',
-        'aliquota_cofins',
-        'aliquota_inss',
-        'aliquota_ir',
-        'aliquota_csll',
     ];
 
     protected $casts = [
         'valor_unitario' => 'decimal:2',
-        'iss_retido' => 'boolean',
-        'aliquota_iss' => 'decimal:2',
     ];
 
     public function empresa()

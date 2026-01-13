@@ -3,17 +3,25 @@
 namespace App\Http\Controllers;
 
 use App\Models\NotaFiscal;
+use App\Models\Servico;
+use App\Models\Cliente;
+use App\Models\Empresa;
 use App\Services\NfseNacionalService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\DB;
 
 class NotaFiscalController extends Controller
 {
+    /**
+     * Listagem de Notas
+     */
     public function index(Request $request)
     {
-        $query = \App\Models\NotaFiscal::where('empresa_id', session('empresa_ativa'));
+        $query = NotaFiscal::where('empresa_id', session('empresa_ativa'));
 
+        // 1. Filtro de Busca (Texto)
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function($q) use ($search) {
@@ -23,212 +31,281 @@ class NotaFiscalController extends Controller
             });
         }
 
+        // 2. Filtro de Status
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
 
+        // 3. Filtro de Data Início
+        if ($request->filled('data_inicio')) {
+            $query->whereDate('created_at', '>=', $request->data_inicio);
+        }
+
+        // 4. Filtro de Data Fim
+        if ($request->filled('data_fim')) {
+            $query->whereDate('created_at', '<=', $request->data_fim);
+        }
+
+        // Paginação mantendo os filtros na URL
         $notas = $query->latest()->paginate(10)->withQueryString();
 
         return view('notas.index', compact('notas'));
     }
 
+    /**
+     * Formulário de Criação
+     */
     public function create()
     {
         $empresaId = session('empresa_ativa');
-        $empresa = \App\Models\Empresa::find($empresaId);
+        $empresa = Empresa::find($empresaId);
 
         if (!$empresa->certificado || !$empresa->certificado->ativo) {
             return redirect()->route('empresas.configuracao')
                 ->withErrors(['erro' => 'Configure seu certificado antes de emitir.']);
         }
 
-        $servicos = \App\Models\Servico::where('empresa_id', $empresaId)->orderBy('nome')->get();
-        $clientes = \App\Models\Cliente::where('empresa_id', $empresaId)->orderBy('razao_social')->get();
+        $servicos = Servico::where('empresa_id', $empresaId)->orderBy('nome')->get();
+        $clientes = Cliente::where('empresa_id', $empresaId)->orderBy('razao_social')->get();
 
         return view('notas.criar', compact('servicos', 'clientes'));
     }
 
+    /**
+     * Salvar Nota (Com lógica de impostos e atualização de cliente)
+     */
     public function store(Request $request)
     {
-        // 1. Validação Completa
-        $validated = $request->validate([
-            'tomador_cnpj'   => 'required|numeric|digits_between:11,14',
-            'tomador_nome'   => 'required|string|max:255',
-            'valor_servico'  => 'required|numeric|min:1',
-            'codigo_servico' => 'required|string',
-            'descricao'      => 'required|string',
+        $empresaId = session('empresa_ativa');
+        $data = $request->all();
 
-            // Campos do Tomador
-            'tomador_email'       => 'nullable|email',
-            'tomador_telefone'    => 'nullable|string',
-            'tomador_im'          => 'nullable|string',
-            'tomador_cep'         => 'nullable|string',
-            'tomador_endereco'    => 'nullable|string',
-            'tomador_numero'      => 'nullable|string',
-            'tomador_complemento' => 'nullable|string',
-            'tomador_bairro'      => 'nullable|string',
-            'tomador_uf'          => 'nullable|string|size:2',
-            'tomador_cidade'      => 'nullable|string',
-
-            // Dados do Serviço
-            'municipio_prestacao' => 'nullable|string',
-            'tributacao_iss'      => 'nullable|integer',
-            'iss_retido'          => 'nullable'
-        ]);
-
-        $empresa = \App\Models\Empresa::find(session('empresa_ativa'));
-
-        if (!$empresa->certificado || !$empresa->certificado->ativo) {
-            return back()->withErrors(['erro' => 'Certificado digital não configurado.']);
-        }
-
-        // 2. ATUALIZA OU CRIA O CLIENTE COM DADOS COMPLETOS
-        // Isso garante que da próxima vez o select tenha os dados
-        // e que o PDF consiga pegar o endereço pelo relacionamento
-        $clienteDados = [
-            'razao_social'        => $validated['tomador_nome'],
-            'email'               => $request->tomador_email,
-            'telefone'            => $request->tomador_telefone,
-            'inscricao_municipal' => $request->tomador_im,
-            'cep'                 => $request->tomador_cep,
-            'logradouro'          => $request->tomador_endereco,
-            'numero'              => $request->tomador_numero,
-            'complemento'         => $request->tomador_complemento,
-            'bairro'              => $request->tomador_bairro,
-            'uf'                  => $request->tomador_uf,
-            'cidade_codigo'       => $request->tomador_cidade,
+        // 1. LIMPEZA DE MÁSCARAS DE DINHEIRO E PORCENTAGEM
+        $camposMonetarios = [
+            'valor_servico',
+            'v_tot_trib_fed', 'v_tot_trib_est', 'v_tot_trib_mun',
+            'p_tot_trib_fed', 'p_tot_trib_est', 'p_tot_trib_mun' // <-- ADICIONADO PORCENTAGENS
         ];
 
-        $cliente = \App\Models\Cliente::updateOrCreate(
-            ['empresa_id' => $empresa->id, 'cnpj' => $validated['tomador_cnpj']],
-            $clienteDados
-        );
+        foreach ($camposMonetarios as $campo) {
+            if (!empty($data[$campo])) {
+                $data[$campo] = str_replace('.', '', $data[$campo]);
+                $data[$campo] = str_replace(',', '.', $data[$campo]);
+            } else {
+                $data[$campo] = 0;
+            }
+        }
 
-        // 3. CÁLCULO DE VALORES
-        $aliquota = 5.00; // Poderia vir do serviço ou da empresa
-        $valorServico = $validated['valor_servico'];
-        $valorIss = $valorServico * ($aliquota / 100);
-        $valorLiquido = $valorServico - $valorIss;
+        if(!empty($data['tomador_cnpj'])) {
+            $data['tomador_cnpj'] = preg_replace('/\D/', '', $data['tomador_cnpj']);
+        }
 
-        // 4. SALVAR A NOTA
-        $nota = \App\Models\NotaFiscal::create([
-            'empresa_id'     => $empresa->id,
-            'cliente_id'     => $cliente->id,
-            'status'         => 'processando',
-            'numero_nfse'    => null,
-            'ambiente'       => config('app.env') === 'production' ? 'producao' : 'homologacao',
-            'tomador_cnpj'   => $validated['tomador_cnpj'],
-            'tomador_nome'   => $validated['tomador_nome'],
-            'tomador_email'  => $request->tomador_email,
-            'codigo_servico' => $validated['codigo_servico'],
-            'descricao'      => $validated['descricao'],
-            'valor_servico'  => $valorServico,
-            'aliquota_iss'   => $aliquota,
-            'valor_iss'      => $valorIss,
-            'valor_liquido'  => $valorLiquido,
+        $request->replace($data);
+
+        // 2. VALIDAÇÃO
+        $request->validate([
+            'tomador_cnpj'   => 'required|digits_between:11,14',
+            'tomador_nome'   => 'required|string|max:255',
+            'valor_servico'  => 'required|numeric|min:0.01',
+            'emissao'        => 'required|date',
+            'descricao'      => 'required|string|min:5',
+            'trib_issqn'     => 'required|integer',
+            'tp_ret_issqn'   => 'required|integer',
         ]);
 
-        // 5. EMISSÃO NA API NACIONAL
+        DB::beginTransaction();
+
         try {
-            $nfseService = new NfseNacionalService($empresa);
-
-            // Passamos TODOS os dados para o serviço XML
-            $dadosEmissao = [
-                'numero'          => $nota->id,
-                'serie'           => '1',
-                'competencia'     => date('Y-m-d'),
-                'tomador_doc'     => $cliente->cnpj,
-                'tomador_nome'    => $cliente->razao_social,
-                'tomador_endereco'      => $cliente->logradouro,
-                'tomador_numero'        => $cliente->numero,
-                'tomador_complemento'   => $cliente->complemento,
-                'tomador_bairro'        => $cliente->bairro,
-                'tomador_cep'           => $cliente->cep,
-                'tomador_uf'            => $cliente->uf,
-                'tomador_cidade_codigo' => $cliente->cidade_codigo,
-                'tomador_telefone'      => $cliente->telefone,
-                'tomador_email'         => $cliente->email,
-
-                'servico_nbs'       => '010501',
-                'servico_municipal' => $validated['codigo_servico'],
-                'discriminacao'     => $validated['descricao'],
-                'valor'             => $valorServico,
-                'tributacao_iss'    => $request->tributacao_iss ?? 1,
-                'retencao_iss'      => $request->has('iss_retido') ? '2' : '1',
-            ];
-
-            $retorno = $nfseService->emitirNota($dadosEmissao);
-
-            if ($retorno['sucesso']) {
-                $nota->update([
-                    'status'             => 'autorizada',
-                    'numero_nfse'        => $retorno['numero_nota'] ?? null,
-                    'codigo_verificacao' => $retorno['codigo_verificacao'] ?? null,
-                    'link_pdf'           => $retorno['link_pdf'] ?? null,
-                    'xml_autorizado'     => $retorno['xml_autorizado'] ?? ($retorno['xml_nacional'] ?? null),
-                    'xml_enviado'        => $retorno['xml_dps_enviado'] ?? null,
-                    'mensagem_erro'      => null
-                ]);
-
-                return redirect()->route('notas.show', $nota->id)
-                    ->with('success', 'Nota Fiscal emitida! Nº ' . ($retorno['numero_nota'] ?? 'S/N'));
-            } else {
-                $msgErro = is_array($retorno['erros'] ?? null)
-                    ? implode(' | ', $retorno['erros'])
-                    : ($retorno['mensagem'] ?? 'Erro desconhecido');
-
-                $nota->update([
-                    'status'        => 'erro',
-                    'mensagem_erro' => $msgErro,
-                    'xml_enviado'   => $retorno['xml_dps_enviado'] ?? null
-                ]);
-
-                return redirect()->route('notas.show', $nota->id)->withErrors(['erro' => $msgErro]);
+            // 3. Lógica de Cliente
+            $clienteId = $request->cliente_id;
+            if (!$clienteId) {
+                $cliente = Cliente::updateOrCreate(
+                    ['empresa_id' => $empresaId, 'documento' => $data['tomador_cnpj']],
+                    [
+                        'razao_social' => $data['tomador_nome'],
+                        'email' => $data['tomador_email'] ?? null,
+                        'endereco' => $data['tomador_endereco'] ?? null
+                    ]
+                );
+                $clienteId = $cliente->id;
             }
 
+            // 4. Criação da Nota
+            $nota = NotaFiscal::create([
+                'empresa_id' => $empresaId,
+                'cliente_id' => $clienteId,
+                'servico_id' => $request->servico_id,
+                'status'     => 'criada',
+                'ambiente'   => config('app.env') === 'production' ? 'producao' : 'homologacao',
+
+                'tomador_cnpj'   => $data['tomador_cnpj'],
+                'tomador_nome'   => $data['tomador_nome'],
+                'tomador_email'  => $data['tomador_email'] ?? null,
+
+                'valor_servico'  => $data['valor_servico'],
+                'descricao'      => $request->descricao,
+                'emissao'        => $request->emissao,
+
+                'trib_issqn'     => $data['trib_issqn'],
+                'tp_ret_issqn'   => $data['tp_ret_issqn'],
+
+                // Valores
+                'v_tot_trib_fed' => $data['v_tot_trib_fed'] ?? 0,
+                'v_tot_trib_est' => $data['v_tot_trib_est'] ?? 0,
+                'v_tot_trib_mun' => $data['v_tot_trib_mun'] ?? 0,
+
+                // Porcentagens (Se seu banco tiver colunas p_tot_..., descomente abaixo)
+                'p_tot_trib_fed' => $data['p_tot_trib_fed'] ?? 0,
+                'p_tot_trib_est' => $data['p_tot_trib_est'] ?? 0,
+                'p_tot_trib_mun' => $data['p_tot_trib_mun'] ?? 0,
+            ]);
+
+            DB::commit();
+
+            return redirect()->route('notas.show', $nota->id)
+                ->with('success', 'Rascunho criado com sucesso!');
+
         } catch (\Exception $e) {
-            $nota->update(['status' => 'erro', 'mensagem_erro' => $e->getMessage()]);
-            return redirect()->route('notas.show', $nota->id)->with('error', $e->getMessage());
+            DB::rollBack();
+            return back()->withInput()->withErrors(['erro' => 'Erro ao salvar: ' . $e->getMessage()]);
         }
     }
 
+    /**
+     * Exibe detalhes da nota
+     */
     public function show($id)
     {
-        $nota = \App\Models\NotaFiscal::where('empresa_id', session('empresa_ativa'))
+        $nota = NotaFiscal::where('empresa_id', session('empresa_ativa'))
             ->with('cliente')
             ->findOrFail($id);
 
         return view('notas.detalhe', compact('nota'));
     }
 
+    /**
+     * Processa a emissão da nota (Envia para a API Nacional)
+     */
+    public function emitir($id)
+    {
+        $nota = NotaFiscal::where('empresa_id', session('empresa_ativa'))
+            // AQUI ESTAVA O PROBLEMA: Carregar o relacionamento 'servico' é obrigatório
+            ->with(['cliente', 'servico'])
+            ->findOrFail($id);
+
+        if (!in_array($nota->status, ['criada', 'erro'])) {
+            return back()->withErrors(['erro' => 'Status inválido.']);
+        }
+
+        // VALIDAÇÃO PRÉVIA DOS CÓDIGOS DO SERVIÇO
+        if (!$nota->servico) {
+            return back()->withErrors(['erro' => 'Nenhum serviço vinculado a esta nota. Não é possível obter os códigos de tributação.']);
+        }
+
+        // Pega os códigos EXATOS do banco, sem inventar fallback
+        $codMun = $nota->servico->codigo_tributacao_municipal; // Ex: 100
+        $codNbs = $nota->servico->codigo_tributacao_nacional;  // Ex: 10101
+
+        if (empty($codMun)) {
+            return back()->withErrors(['erro' => 'O cadastro do serviço selecionado não possui o Código de Tributação Municipal (Ex: 100).']);
+        }
+
+        try {
+            $nota->update(['status' => 'processando']);
+            $service = new NfseNacionalService($nota->empresa);
+
+            $dados = [
+                'numero' => $nota->id,
+                'serie' => '1',
+                'competencia' => $nota->emissao->format('Y-m-d'),
+                'tomador_doc' => $nota->tomador_cnpj,
+                'tomador_nome' => $nota->tomador_nome,
+                'tomador_email' => $nota->tomador_email,
+
+                'tomador_endereco' => $nota->cliente->logradouro ?? '',
+                'tomador_numero' => $nota->cliente->numero ?? 'S/N',
+                'tomador_bairro' => $nota->cliente->bairro ?? 'Centro',
+                'tomador_cep' => $nota->cliente->cep ?? '',
+                'tomador_cidade_codigo' => $nota->cliente->cidade_codigo ?? '1302603',
+                'tomador_uf' => $nota->cliente->uf ?? 'AM',
+
+                'valor' => $nota->valor_servico,
+                'discriminacao' => $nota->descricao,
+                'tributacao_iss' => $nota->trib_issqn,
+                'retencao_iss' => $nota->tp_ret_issqn,
+
+                // USA OS CÓDIGOS REAIS CARREGADOS ACIMA
+                'servico_nbs' => $codNbs,
+                'servico_municipal' => $codMun,
+
+                // Mapeia p_tot_trib_mun (Alíquota ISS) para 'aliquota' que o service espera
+                'aliquota' => ($nota->p_tot_trib_mun > 0) ? $nota->p_tot_trib_mun : 2.00,
+
+                'v_tot_trib_fed' => $nota->v_tot_trib_fed,
+                'v_tot_trib_est' => $nota->v_tot_trib_est,
+                'v_tot_trib_mun' => $nota->v_tot_trib_mun,
+            ];
+
+            $retorno = $service->emitirNota($dados);
+
+            if (isset($retorno['xml_dps_enviado'])) {
+                $nota->xml_enviado = $retorno['xml_dps_enviado'];
+                // Salva apenas o campo xml_enviado por enquanto, sem mudar status
+                $nota->save();
+            }
+
+            if ($retorno['sucesso']) {
+                $nota->update([
+                    'status' => 'autorizada',
+                    'numero_nfse' => $retorno['numero_nota'],
+                    'codigo_verificacao' => $retorno['codigo_verificacao'] ?? null,
+                    'chave_acesso' => $retorno['chave_acesso'] ?? null,
+                    'xml_autorizado' => $retorno['xml_autorizado']
+                ]);
+                return redirect()->route('notas.show', $nota->id)->with('success', 'Emitida com sucesso!');
+            } else {
+                $msg = $retorno['mensagem'];
+                if(isset($retorno['erros']) && is_array($retorno['erros'])) {
+                    $msgs = [];
+                    foreach($retorno['erros'] as $e) {
+                        $msgs[] = is_array($e) ? ($e['Descricao'] ?? json_encode($e)) : $e;
+                    }
+                    $msg = implode(' | ', $msgs);
+                }
+
+                $nota->update([
+                    'status' => 'erro',
+                    'mensagem_erro' => $msg,
+                    'xml_enviado' => $retorno['xml_dps_enviado'] ?? $nota->xml_enviado
+                ]);
+                return back()->withErrors(['erro' => $msg]);
+            }
+        } catch (\Exception $e) {
+            $nota->update(['status' => 'erro', 'mensagem_erro' => $e->getMessage()]);
+            return back()->withErrors(['erro' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Gera PDF local (Espelho)
+     */
     public function imprimir($id)
     {
-        // 1. BUSCA DADOS
-        $nota = \App\Models\NotaFiscal::where('empresa_id', session('empresa_ativa'))
+        $nota = NotaFiscal::where('empresa_id', session('empresa_ativa'))
             ->findOrFail($id);
+
         $empresaIdSessao = session('empresa_ativa');
 
         if (!$empresaIdSessao) {
             return redirect()->route('dashboard')->withErrors(['erro' => 'Sessão expirada.']);
         }
 
-        if ($nota->empresa_id != $empresaIdSessao) {
-            if (empty($nota->empresa_id)) {
-                $nota->empresa_id = $empresaIdSessao;
-                $nota->save();
-            } else {
-                abort(403, "Permissão negada.");
-            }
-        }
-
-        $empresa = $nota->empresa ?? \App\Models\Empresa::find($empresaIdSessao);
-        $cliente = $nota->cliente; // Agora o cliente estará completo
+        $empresa = $nota->empresa ?? Empresa::find($empresaIdSessao);
+        $cliente = $nota->cliente;
 
         $xmlObject = null;
         $chaveAcesso = null;
         $dataEmissao = $nota->created_at;
 
-        // --- TRATAMENTO DO XML E CHAVE ---
         if ($nota->status === 'autorizada' && !empty($nota->xml_autorizado)) {
             try {
                 $content = $nota->xml_autorizado;
@@ -242,21 +319,18 @@ class NotaFiscalController extends Controller
 
                 $xmlObject = simplexml_load_string(str_replace(['ns1:', 'nfse:'], '', $content));
 
-                // Regex para Chave
                 if (preg_match('/<chvAcesso>(.*?)<\/chvAcesso>/', $content, $matches)) {
                     $chaveAcesso = $matches[1];
                 } elseif (preg_match('/Id="NFS([0-9]{50})"/', $content, $matches)) {
                     $chaveAcesso = $matches[1];
                 }
 
-                // Regex para Data
                 if (preg_match('/<dhEmi>(.*?)<\/dhEmi>/', $content, $matches)) {
                     $dataEmissao = new \DateTime($matches[1]);
                 }
             } catch (\Exception $e) { }
         }
 
-        // --- QR CODE (Versão HTTP Client do Laravel) ---
         $qrBase64 = null;
         $fallbackImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
@@ -264,11 +338,8 @@ class NotaFiscalController extends Controller
             try {
                 $urlConsulta = "https://www.nfse.gov.br/ConsultaPublica/";
                 $qrLink = "{$urlConsulta}?tpc=1&chave={$chaveAcesso}";
-
                 $apiUrl = "https://quickchart.io/qr?text=" . urlencode($qrLink) . "&size=300&ecLevel=M&margin=1";
-
                 $response = Http::withOptions(['verify' => false])->timeout(5)->get($apiUrl);
-
                 if ($response->successful()) {
                     $qrBase64 = 'data:image/png;base64,' . base64_encode($response->body());
                 } else {
@@ -282,7 +353,6 @@ class NotaFiscalController extends Controller
             $qrBase64 = $fallbackImage;
         }
 
-        // --- OBJETOS PARA O PDF ---
         $emitente = (object) [
             'razao_social' => $empresa->razao_social,
             'cnpj' => $empresa->cnpj,
@@ -299,10 +369,9 @@ class NotaFiscalController extends Controller
             'regime_tributario' => 'Simples Nacional'
         ];
 
-        // Tomador usando dados do Cliente do banco (agora completo)
         $tomador = (object) [
             'razao_social'        => $cliente?->razao_social ?? $nota->tomador_nome,
-            'documento'           => $cliente?->cnpj ?? $nota->tomador_cnpj,
+            'documento'           => $cliente?->documento ?? $nota->tomador_cnpj,
             'inscricao_municipal' => $cliente?->inscricao_municipal ?? '',
             'endereco'            => $cliente?->logradouro ?? '',
             'numero'              => $cliente?->numero ?? '',
@@ -316,31 +385,28 @@ class NotaFiscalController extends Controller
         ];
 
         $dadosNota = (object) [
+            'id' => $nota->id,
             'numero' => $nota->numero_nfse,
             'serie' => '1',
             'chave' => $chaveAcesso,
             'data_emissao' => $dataEmissao,
             'codigo_verificacao' => $nota->codigo_verificacao,
             'competencia' => $dataEmissao,
-            'local_prestacao' => 'Manaus/AM'
+            'local_prestacao' => 'Manaus/AM',
+            'status' => $nota->status,
         ];
 
         $dadosServico = (object) [
             'discriminacao' => $nota->descricao,
             'codigo_nbs' => '01.05.01',
             'codigo_cnae' => '',
-            'item_lista_servico' => $nota->codigo_servico,
+            'item_lista_servico' => $nota->servico?->codigo_tributacao_municipal ?? '',
             'valor_servico' => (float)$nota->valor_servico,
             'valor_deducoes' => 0.00,
-            'valor_pis' => 0.00,
-            'valor_cofins' => 0.00,
-            'valor_inss' => 0.00,
-            'valor_ir' => 0.00,
-            'valor_csll' => 0.00,
-            'iss_retido' => 2,
-            'valor_iss' => (float)$nota->valor_iss,
-            'valor_liquido' => (float)$nota->valor_liquido,
-            'aliquota_iss' => (float)$nota->aliquota_iss
+            'iss_retido' => $nota->tp_ret_issqn == 2 ? 1 : 2,
+            'valor_iss' => 0.00,
+            'valor_liquido' => (float)$nota->valor_servico,
+            'aliquota_iss' => 0.00
         ];
 
         $outras_informacoes = "Documento emitido por ME ou EPP optante pelo Simples Nacional.";
@@ -360,30 +426,21 @@ class NotaFiscalController extends Controller
     }
 
     /**
-     * Faz o download do DANFSe oficial direto da API Nacional
+     * Download do PDF Oficial da API Nacional
      */
     public function baixarDanfseOficial($id)
     {
-        $nota = \App\Models\NotaFiscal::where('empresa_id', session('empresa_ativa'))
+        $nota = NotaFiscal::where('empresa_id', session('empresa_ativa'))
             ->findOrFail($id);
-
-        // Verificação de segurança da empresa
-        if ($nota->empresa_id != session('empresa_ativa')) {
-            abort(403);
-        }
 
         if ($nota->status !== 'autorizada' || empty($nota->xml_autorizado)) {
             return back()->withErrors(['erro' => 'Esta nota não possui XML autorizado para gerar o DANFSe.']);
         }
 
-        // 1. Tenta obter a chave de acesso (Prioridade: Coluna no banco -> Extração do XML)
         $chaveAcesso = $nota->chave_acesso ?? null;
 
         if (empty($chaveAcesso)) {
-            // Lógica de extração segura do XML (Reutilizando a lógica do seu método imprimir)
             $content = $nota->xml_autorizado;
-
-            // Decodifica GZIP/Base64 se necessário
             if (str_starts_with($content, "\x1f\x8b")) {
                 $content = gzdecode($content);
             } elseif (!str_starts_with(trim($content), '<')) {
@@ -392,7 +449,6 @@ class NotaFiscalController extends Controller
                 elseif ($decoded) $content = $decoded;
             }
 
-            // Busca a tag <chvAcesso> ou atributo Id
             if (preg_match('/<chvAcesso>(.*?)<\/chvAcesso>/', $content, $matches)) {
                 $chaveAcesso = $matches[1];
             } elseif (preg_match('/Id="NFS([0-9]{50})"/', $content, $matches)) {
@@ -405,11 +461,9 @@ class NotaFiscalController extends Controller
         }
 
         try {
-            // 2. Chama o Service para baixar o PDF do Governo
             $service = new NfseNacionalService($nota->empresa);
             $pdfContent = $service->downloadDanfse($chaveAcesso);
 
-            // 3. Retorna o PDF para o navegador
             return response($pdfContent)
                 ->header('Content-Type', 'application/pdf')
                 ->header('Content-Disposition', 'inline; filename="DANFSe_Oficial_' . $nota->numero_nfse . '.pdf"');
