@@ -50,6 +50,8 @@ Route::middleware(['auth', 'verified'])->prefix('app')->group(function () {
     // =========================================================================
     Route::get('/notas', [NotaFiscalController::class, 'index'])->name('notas.index');
     Route::get('/notas/nova', [NotaFiscalController::class, 'create'])->name('notas.create');
+    Route::get('/notas/{id}/editar', [NotaFiscalController::class, 'edit'])->name('notas.edit');
+    Route::put('/notas/{id}', [NotaFiscalController::class, 'update'])->name('notas.update');
     Route::post('/notas/emitir', [NotaFiscalController::class, 'store'])->name('notas.store');
     Route::get('/notas/{id}', [NotaFiscalController::class, 'show'])->name('notas.show');
     Route::get('/notas/{id}/imprimir', [NotaFiscalController::class, 'imprimir'])->name('notas.imprimir');

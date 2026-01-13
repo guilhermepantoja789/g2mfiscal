@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Servico;
 use App\Models\Empresa;
+use App\Models\TributacaoNacional;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Session;
@@ -28,11 +29,16 @@ class ServicoController extends Controller
     {
         $empresa = $this->getEmpresaAtiva();
 
-        // Mantemos apenas a lógica de códigos padrão se necessário
         $isManaus = $empresa->cod_ibge_mun == '1302603';
         $padraoMunicipal = $isManaus ? '100' : '';
 
-        return view('servicos.create', compact('isManaus', 'padraoMunicipal'));
+        // --- MUDANÇA AQUI: Buscando os códigos do banco ---
+        // Pegamos apenas os campos necessários para não pesar a memória
+        $codigosNacionais = TributacaoNacional::select('codigo', 'item_lc116', 'descricao')
+            ->orderBy('codigo')
+            ->get();
+
+        return view('servicos.create', compact('isManaus', 'padraoMunicipal', 'codigosNacionais'));
     }
 
     public function store(Request $request)
@@ -69,8 +75,18 @@ class ServicoController extends Controller
 
     public function edit(Servico $servico)
     {
-        if ($servico->empresa_id != Session::get('empresa_ativa')) abort(403);
-        return view('servicos.edit', compact('servico'));
+        if ($servico->empresa_id != session('empresa_ativa')) abort(403);
+
+        $empresa = Empresa::find($servico->empresa_id); // Busca a empresa para checar se é Manaus
+
+        // Variáveis necessárias para a view atualizada
+        $isManaus = $empresa->cod_ibge_mun == '1302603';
+
+        $codigosNacionais = TributacaoNacional::select('codigo', 'item_lc116', 'descricao')
+            ->orderBy('codigo')
+            ->get();
+
+        return view('servicos.edit', compact('servico', 'isManaus', 'codigosNacionais'));
     }
 
     public function update(Request $request, Servico $servico)

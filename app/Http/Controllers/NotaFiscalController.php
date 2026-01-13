@@ -181,6 +181,138 @@ class NotaFiscalController extends Controller
 
         return view('notas.detalhe', compact('nota'));
     }
+    /*
+    * Tela de Edição (Apenas Rascunho/Erro)
+    */
+    public function edit($id)
+    {
+        $empresaId = session('empresa_ativa');
+        $nota = NotaFiscal::where('empresa_id', $empresaId)
+            ->with(['servico', 'cliente'])
+            ->findOrFail($id);
+
+        // Bloqueia edição se já foi emitida
+        if (!in_array($nota->status, ['criada', 'erro', 'rascunho'])) {
+            return redirect()->route('notas.show', $id)
+                ->withErrors(['erro' => 'Esta nota não pode ser editada pois já foi processada.']);
+        }
+
+        $servicos = Servico::where('empresa_id', $empresaId)->orderBy('nome')->get();
+        $clientes = Cliente::where('empresa_id', $empresaId)->orderBy('razao_social')->get();
+
+        return view('notas.editar', compact('nota', 'servicos', 'clientes'));
+    }
+
+    /**
+     * Atualiza a Nota no Banco
+     */
+    public function update(Request $request, $id)
+    {
+        $empresaId = session('empresa_ativa');
+        $nota = NotaFiscal::where('empresa_id', $empresaId)->findOrFail($id);
+
+        if (!in_array($nota->status, ['criada', 'erro', 'rascunho'])) {
+            return back()->withErrors(['erro' => 'Nota bloqueada para edição.']);
+        }
+
+        $data = $request->all();
+
+        // 1. Limpeza de Máscaras
+        $camposMonetarios = [
+            'valor_servico',
+            'v_tot_trib_fed', 'v_tot_trib_est', 'v_tot_trib_mun',
+            'p_tot_trib_fed', 'p_tot_trib_est', 'p_tot_trib_mun'
+        ];
+
+        foreach ($camposMonetarios as $campo) {
+            if (!empty($data[$campo])) {
+                $data[$campo] = str_replace('.', '', $data[$campo]);
+                $data[$campo] = str_replace(',', '.', $data[$campo]);
+            } else {
+                $data[$campo] = 0;
+            }
+        }
+
+        if(!empty($data['tomador_cnpj'])) {
+            $data['tomador_cnpj'] = preg_replace('/\D/', '', $data['tomador_cnpj']);
+        }
+
+        $request->replace($data);
+
+        // 2. Validação
+        $request->validate([
+            'tomador_cnpj'   => 'required|digits_between:11,14',
+            'tomador_nome'   => 'required|string|max:255',
+            'valor_servico'  => 'required|numeric|min:0.01',
+            'emissao'        => 'required|date',
+            'descricao'      => 'required|string|min:5',
+            'trib_issqn'     => 'required|integer',
+            'tp_ret_issqn'   => 'required|integer',
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            // 3. Atualiza ou Cria Cliente (caso tenha mudado os dados)
+            // Se o usuário mudou o CNPJ, pode ser um novo cliente ou atualização do atual.
+            // Para simplificar, buscamos pelo CNPJ.
+            $clienteId = $request->cliente_id;
+
+            // Se não veio ID mas tem CNPJ, tenta achar ou criar
+            if (!$clienteId && $data['tomador_cnpj']) {
+                $cliente = Cliente::updateOrCreate(
+                    ['empresa_id' => $empresaId, 'documento' => $data['tomador_cnpj']],
+                    [
+                        'razao_social' => $data['tomador_nome'],
+                        'email' => $data['tomador_email'] ?? null,
+                        'endereco' => $data['tomador_endereco'] ?? null
+                    ]
+                );
+                $clienteId = $cliente->id;
+            }
+
+            // 4. Atualiza a Nota
+            $nota->update([
+                'cliente_id' => $clienteId,
+                'servico_id' => $request->servico_id,
+                // Mantém status como rascunho (criada) ao editar, ou erro se estava em erro
+                // Se estava em erro e o usuário editou, voltamos para 'criada' para permitir nova tentativa limpa?
+                // Geralmente sim:
+                'status'     => ($nota->status == 'erro') ? 'criada' : $nota->status,
+
+                'tomador_cnpj'   => $data['tomador_cnpj'],
+                'tomador_nome'   => $data['tomador_nome'],
+                'tomador_email'  => $data['tomador_email'] ?? null,
+
+                'valor_servico'  => $data['valor_servico'],
+                'descricao'      => $request->descricao,
+                'emissao'        => $request->emissao,
+
+                'trib_issqn'     => $data['trib_issqn'],
+                'tp_ret_issqn'   => $data['tp_ret_issqn'],
+
+                'v_tot_trib_fed' => $data['v_tot_trib_fed'] ?? 0,
+                'v_tot_trib_est' => $data['v_tot_trib_est'] ?? 0,
+                'v_tot_trib_mun' => $data['v_tot_trib_mun'] ?? 0,
+
+                'p_tot_trib_fed' => $data['p_tot_trib_fed'] ?? 0,
+                'p_tot_trib_est' => $data['p_tot_trib_est'] ?? 0,
+                'p_tot_trib_mun' => $data['p_tot_trib_mun'] ?? 0,
+
+                // Limpa mensagem de erro antiga ao editar
+                'mensagem_erro' => null
+            ]);
+
+            DB::commit();
+
+            return redirect()->route('notas.show', $nota->id)
+                ->with('success', 'Nota atualizada com sucesso!');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withInput()->withErrors(['erro' => 'Erro ao atualizar: ' . $e->getMessage()]);
+        }
+    }
 
     /**
      * Processa a emissão da nota (Envia para a API Nacional)
