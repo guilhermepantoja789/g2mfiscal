@@ -37,6 +37,40 @@
                         Notas Fiscais
                     </a>
 
+                    @php
+                        $financeiroAtivo = env('FEATURE_FINANCEIRO', false);
+                    @endphp
+
+                    <a href="{{ route('cobrancas.index') }}" class="{{ request()->routeIs('cobrancas.*') ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }} group flex items-center justify-between px-2 py-2 text-sm font-medium rounded-md">
+                        <div class="flex items-center">
+                            <svg class="text-slate-400 group-hover:text-slate-300 mr-3 flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Cobranças
+                        </div>
+                        @if(!$financeiroAtivo)
+                            <span class="bg-slate-700 text-slate-300 py-0.5 px-2 rounded-full text-[10px] uppercase font-bold tracking-wide">BREVE</span>
+                        @endif
+                    </a>
+
+                    <a href="{{ route('carteira.index') }}" class="{{ request()->routeIs('carteira.*') ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }} group flex items-center justify-between px-2 py-2 text-sm font-medium rounded-md">
+                        <div class="flex items-center">
+                            <svg class="text-slate-400 group-hover:text-slate-300 mr-3 flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                            </svg>
+                            Carteira / Saque
+                        </div>
+                        @if(!$financeiroAtivo)
+                            <span class="bg-slate-700 text-slate-300 py-0.5 px-2 rounded-full text-[10px] uppercase font-bold tracking-wide">BREVE</span>
+                        @endif
+                    </a>
+
+                    <a href="{{ route('recorrencias.index') }}" class="{{ request()->routeIs('recorrencias.*') ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }} group flex items-center px-2 py-2 text-sm font-medium rounded-md">
+                        <svg class="text-slate-400 group-hover:text-slate-300 mr-3 flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Recorrências
+                    </a>
                     <a href="{{ route('clientes.index') }}" class="{{ request()->routeIs('clientes.*') ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }} group flex items-center px-2 py-2 text-sm font-medium rounded-md">
                         <svg class="text-slate-400 group-hover:text-slate-300 mr-3 flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                         Clientes
@@ -52,19 +86,15 @@
                         $sessao = \Illuminate\Support\Facades\Session::get('empresa_ativa');
 
                         if ($sessao) {
-                            // 1. Se for numérico (ID puro), usa direto
                             if (is_numeric($sessao)) {
                                 $empresaAtivaId = $sessao;
                             }
-                            // 2. Se for instância da Model Empresa (verifica tipo estrito)
                             elseif ($sessao instanceof \App\Models\Empresa) {
                                 $empresaAtivaId = $sessao->id;
                             }
-                            // 3. Se for array
                             elseif (is_array($sessao) && isset($sessao['id'])) {
                                 $empresaAtivaId = $sessao['id'];
                             }
-                            // NOTA: Removemos o check genérico is_object($sessao) para evitar o erro do Store
                         }
                     @endphp
 
@@ -86,9 +116,7 @@
     </div>
 
     <div class="flex flex-1 flex-col md:pl-64 transition-all duration-300">
-
         <div class="sticky top-0 z-10 flex h-16 flex-shrink-0 bg-white shadow items-center">
-
             <button type="button" class="border-r border-gray-200 px-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 md:hidden" @click="sidebarOpen = true">
                 <span class="sr-only">Open sidebar</span>
                 <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" /></svg>
@@ -99,8 +127,6 @@
                     @php
                         $nomeEmpresaExibicao = 'Painel';
                         $cnpjEmpresaExibicao = '';
-
-                        // Reutiliza a lógica segura do ID calculada acima
                         if($empresaAtivaId) {
                             $empresaObj = \App\Models\Empresa::find($empresaAtivaId);
                             if($empresaObj) {
@@ -128,7 +154,6 @@
                                 </div>
                             </button>
                         </div>
-
                         <div x-show="open" @click.away="open = false" class="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none" style="display: none;">
                             <div class="px-4 py-3 border-b border-gray-100">
                                 <p class="text-sm font-medium text-gray-900 truncate">{{ Auth::user()->name }}</p>
@@ -144,7 +169,6 @@
                 </div>
             </div>
         </div>
-
         <main class="flex-1 bg-gray-100">
             <div class="py-8">
                 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

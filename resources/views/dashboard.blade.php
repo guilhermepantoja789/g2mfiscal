@@ -3,8 +3,8 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
 
             <div class="mb-6">
-                <h1 class="text-2xl font-semibold text-gray-900">Dashboard Financeiro</h1>
-                <p class="mt-1 text-sm text-gray-500">Análise detalhada de emissões autorizadas.</p>
+                <h1 class="text-2xl font-semibold text-gray-900">Dashboard Geral</h1>
+                <p class="mt-1 text-sm text-gray-500">Visão completa de emissões fiscais e recebimentos financeiros.</p>
             </div>
 
             <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-8">
@@ -70,11 +70,64 @@
                 </form>
             </div>
 
+            <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-3">Fluxo de Caixa (Vencimento no Período)</h2>
+            <div class="grid grid-cols-1 gap-5 sm:grid-cols-3 lg:grid-cols-3 mb-8">
+
+                <div class="bg-white overflow-hidden shadow rounded-lg border-l-4 border-green-600 relative group">
+                    <div class="p-5">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                                <svg class="h-6 w-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            </div>
+                            <div class="ml-5 w-0 flex-1">
+                                <dl>
+                                    <dt class="text-sm font-medium text-gray-500 truncate">Recebido Real</dt>
+                                    <dd class="mt-1 text-2xl font-bold text-gray-900">R$ {{ number_format($stats['fin_realizado'] ?? 0, 2, ',', '.') }}</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white overflow-hidden shadow rounded-lg border-l-4 border-yellow-400">
+                    <div class="p-5">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                                <svg class="h-6 w-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            </div>
+                            <div class="ml-5 w-0 flex-1">
+                                <dl>
+                                    <dt class="text-sm font-medium text-gray-500 truncate">A Receber</dt>
+                                    <dd class="mt-1 text-2xl font-bold text-gray-900">R$ {{ number_format($stats['fin_pendente'] ?? 0, 2, ',', '.') }}</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white overflow-hidden shadow rounded-lg border-l-4 border-red-500">
+                    <div class="p-5">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                                <svg class="h-6 w-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                            </div>
+                            <div class="ml-5 w-0 flex-1">
+                                <dl>
+                                    <dt class="text-sm font-medium text-gray-500 truncate">Inadimplência</dt>
+                                    <dd class="mt-1 text-2xl font-bold text-gray-900">R$ {{ number_format($stats['fin_vencido'] ?? 0, 2, ',', '.') }}</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-3">Dados Fiscais (Competência/Emissão)</h2>
             <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 mb-8">
                 <div class="bg-white overflow-hidden shadow rounded-lg border-l-4 border-blue-500">
                     <div class="p-5">
                         <dl>
-                            <dt class="text-sm font-medium text-gray-500 truncate">Faturamento Selecionado</dt>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Faturamento Emitido</dt>
                             <dd class="mt-1 text-2xl font-bold text-gray-900">
                                 R$ {{ number_format($stats['faturamento'], 2, ',', '.') }}
                             </dd>
@@ -85,7 +138,7 @@
                 <div class="bg-white overflow-hidden shadow rounded-lg border-l-4 border-green-500">
                     <div class="p-5">
                         <dl>
-                            <dt class="text-sm font-medium text-gray-500 truncate">Notas Emitidas</dt>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Notas Autorizadas</dt>
                             <dd class="mt-1 text-2xl font-bold text-gray-900">
                                 {{ $stats['notas_emitidas'] }}
                             </dd>
@@ -93,10 +146,10 @@
                     </div>
                 </div>
 
-                <div class="bg-white overflow-hidden shadow rounded-lg border-l-4 border-red-500">
+                <div class="bg-white overflow-hidden shadow rounded-lg border-l-4 border-red-400">
                     <div class="p-5">
                         <dl>
-                            <dt class="text-sm font-medium text-gray-500 truncate">Total Impostos</dt>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Provisão Impostos</dt>
                             <dd class="mt-1 text-2xl font-bold text-gray-900">
                                 R$ {{ number_format($stats['impostos_total'], 2, ',', '.') }}
                             </dd>
@@ -190,10 +243,10 @@
         }
 
         document.addEventListener('DOMContentLoaded', function () {
-            // Configuração dos Gráficos (Mantidos da versão anterior)
+            // Configuração dos Gráficos
             const ctxFaturamento = document.getElementById('faturamentoChart').getContext('2d');
             new Chart(ctxFaturamento, {
-                type: 'line', // Alterei para Linha, fica melhor para evolução temporal
+                type: 'line',
                 data: {
                     labels: @json($stats['grafico_labels']),
                     datasets: [{
@@ -203,7 +256,7 @@
                         backgroundColor: 'rgba(59, 130, 246, 0.1)',
                         borderWidth: 2,
                         fill: true,
-                        tension: 0.3 // Curva suave
+                        tension: 0.3
                     }]
                 },
                 options: {

@@ -1,7 +1,8 @@
 <?php
 
 namespace App\Http\Controllers;
-
+use App\Models\Cobranca;
+use App\Services\FinanceiroService;
 use App\Models\NotaFiscal;
 use App\Models\Servico;
 use App\Models\Cliente;
@@ -74,7 +75,7 @@ class NotaFiscalController extends Controller
     /**
      * Salvar Nota (Com lógica de impostos e atualização de cliente)
      */
-    public function store(Request $request)
+    public function store(Request $request, FinanceiroService $financeiroService)
     {
         $empresaId = session('empresa_ativa');
         $data = $request->all();
@@ -111,6 +112,12 @@ class NotaFiscalController extends Controller
             'trib_issqn'     => 'required|integer',
             'tp_ret_issqn'   => 'required|integer',
         ]);
+
+        if ($request->has('gerar_cobranca')) {
+            $request->validate([
+                'vencimento' => 'required|date|after_or_equal:today'
+            ]);
+        }
 
         DB::beginTransaction();
 
@@ -159,6 +166,13 @@ class NotaFiscalController extends Controller
                 'p_tot_trib_mun' => $data['p_tot_trib_mun'] ?? 0,
             ]);
 
+            if ($request->has('gerar_cobranca')) {
+                $financeiroService->gerarCobrancaDeNota(
+                    $nota,
+                    $request->input('vencimento')
+                );
+            }
+
             DB::commit();
 
             return redirect()->route('notas.show', $nota->id)
@@ -206,7 +220,7 @@ class NotaFiscalController extends Controller
     /**
      * Atualiza a Nota no Banco
      */
-    public function update(Request $request, $id)
+    public function update(Request $request, $id, FinanceiroService $financeiroService)
     {
         $empresaId = session('empresa_ativa');
         $nota = NotaFiscal::where('empresa_id', $empresaId)->findOrFail($id);
@@ -302,6 +316,12 @@ class NotaFiscalController extends Controller
                 // Limpa mensagem de erro antiga ao editar
                 'mensagem_erro' => null
             ]);
+
+            if ($request->has('gerar_cobranca')) {
+                // Se não existia cobrança, cria. Se existia, atualiza.
+                // Para simplificar, vamos assumir atualizar:
+                $financeiroService->atualizarCobrancaDaNota($nota, $request->input('vencimento'));
+            }
 
             DB::commit();
 

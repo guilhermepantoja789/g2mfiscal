@@ -27,7 +27,23 @@ class Empresa extends Model
         'uf',
         'cod_ibge_mun',
         'email',
-        'telefone'
+        'telefone',
+
+        // --- NOVOS CAMPOS FINANCEIROS (MÓDULO ASAAS) ---
+        'asaas_wallet_id',     // ID da subconta
+        'asaas_token',         // Token da API da subconta
+
+        // Dados Bancários para Saque (Destino do dinheiro)
+        'banco_codigo',
+        'banco_nome',
+        'agencia',
+        'conta',
+        'conta_tipo',          // CC ou CP
+        'chave_pix',
+
+        // Configurações de Automação
+        'saque_automatico',
+        'saque_frequencia_dias'
     ];
 
     // Constantes para ajudar no código
@@ -36,7 +52,7 @@ class Empresa extends Model
     const REGIME_SIMPLES = 3;
 
     // =========================================================================
-    // RELACIONAMENTOS (Aqui estava o problema)
+    // RELACIONAMENTOS
     // =========================================================================
 
     /**

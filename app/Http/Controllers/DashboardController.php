@@ -121,6 +121,26 @@ class DashboardController extends Controller
             'agrupamento' => $agrupamento == 'DIA' ? 'Diária' : 'Mensal'
         ];
 
+        // 7. Estatísticas FINANCEIRAS (Novo Bloco)
+        // Reutilizamos $baseQuery mas focamos na tabela cobrancas vinculada ou query direta
+        // Para ser mais preciso, vamos fazer uma query direta na tabela Cobranca respeitando as datas
+        // O Dashboard financeiro geralmente olha VENCIMENTO ou PAGAMENTO, não EMISSAO da nota.
+        // Vamos assumir VENCIMENTO dentro do período selecionado.
+
+        $financeiroStats = \App\Models\Cobranca::where('empresa_id', $empresaId)
+            ->whereBetween('vencimento', [$dataInicio, $dataFim])
+            ->select(
+                DB::raw("SUM(CASE WHEN status = 'PENDING' THEN valor ELSE 0 END) as pendente"),
+                DB::raw("SUM(CASE WHEN status = 'RECEIVED' THEN valor ELSE 0 END) as realizado"),
+                DB::raw("SUM(CASE WHEN status = 'OVERDUE' OR (status='PENDING' AND vencimento < CURDATE()) THEN valor ELSE 0 END) as vencido")
+            )
+            ->first();
+
+        // Adicionamos ao array $stats que vai pra view
+        $stats['fin_pendente'] = $financeiroStats->pendente ?? 0;
+        $stats['fin_realizado'] = $financeiroStats->realizado ?? 0;
+        $stats['fin_vencido'] = $financeiroStats->vencido ?? 0;
+
         return view('dashboard', compact('empresa', 'stats', 'topClientes', 'filtroClientes', 'filtroServicos'));
     }
 }
