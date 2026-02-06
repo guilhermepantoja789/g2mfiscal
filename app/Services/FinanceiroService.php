@@ -4,45 +4,60 @@ namespace App\Services;
 
 use App\Models\Cobranca;
 use App\Models\NotaFiscal;
-use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class FinanceiroService
 {
     /**
-     * Cria uma cobrança localmente baseada na Nota Fiscal
+     * Cria uma cobrança vinculada a uma Nota Fiscal (Estado Inicial: RASCUNHO)
      */
-    public function gerarCobrancaDeNota(NotaFiscal $nota, $dataVencimento)
+    public function gerarCobrancaDeNota(NotaFiscal $nota, $vencimento)
     {
-        // 1. Aqui entra a lógica de verificação
-        // Ex: Se a empresa tem token do Asaas configurado, chamar API.
-        // Por enquanto, vamos criar apenas o registro interno "OFFLINE".
+        try {
+            // Lógica interna para criar o registro "OFFLINE" inicialmente
+            // Se futuramente integrar com API (Asaas/Iugu), a chamada seria feita na emissão da nota, não aqui.
 
-        $cobranca = Cobranca::create([
-            'empresa_id' => $nota->empresa_id,
-            'cliente_id' => $nota->cliente_id,
-            'nota_fiscal_id' => $nota->id,
-            'valor' => $nota->valor_liquido ?? $nota->valor_servico, // Usa o líquido se houver retenção
-            'vencimento' => $dataVencimento,
-            'status' => 'PENDING',
-            'descricao' => 'Referente à NFS-e (Rascunho) ' . $nota->id,
-            'gateway' => 'manual', // Marcamos como manual por enquanto
-        ]);
+            return Cobranca::create([
+                'empresa_id'     => $nota->empresa_id,
+                'cliente_id'     => $nota->cliente_id,
+                'nota_fiscal_id' => $nota->id,
 
-        return $cobranca;
+                'valor'          => $nota->valor_liquido ?? $nota->valor_servico, // Usa o líquido se houver retenção
+
+                'vencimento'     => $vencimento,
+                'status'         => 'RASCUNHO', // <--- CORREÇÃO: Nasce inativa (cinza)
+
+                'descricao'      => 'Pré-lançamento ref. NFS-e (Rascunho #' . $nota->id . ')',
+                'gateway'        => 'manual'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Erro ao gerar cobrança da nota {$nota->id}: " . $e->getMessage());
+            throw $e;
+        }
     }
 
     /**
-     * Atualiza a cobrança se a nota mudar (valor ou cliente)
+     * Atualiza a cobrança existente quando o usuário edita a Nota
      */
-    public function atualizarCobrancaDaNota(NotaFiscal $nota, $dataVencimento)
+    public function atualizarCobrancaDaNota(NotaFiscal $nota, $vencimento)
     {
         $cobranca = Cobranca::where('nota_fiscal_id', $nota->id)->first();
 
-        if ($cobranca && $cobranca->status === 'PENDING') {
+        // Se não existir cobrança, cria uma nova
+        if (!$cobranca) {
+            return $this->gerarCobrancaDeNota($nota, $vencimento);
+        }
+
+        // CORREÇÃO: Permite atualizar se for RASCUNHO ou PENDING (Aguardando)
+        // Bloqueia apenas se já estiver Paga (RECEIVED) ou Cancelada
+        if (in_array($cobranca->status, ['RASCUNHO', 'PENDING'])) {
+
             $cobranca->update([
-                'cliente_id' => $nota->cliente_id, // Caso tenha mudado o tomador
-                'valor' => $nota->valor_liquido ?? $nota->valor_servico,
-                'vencimento' => $dataVencimento
+                'cliente_id'    => $nota->cliente_id, // Caso tenha mudado o cliente
+                'valor'         => $nota->valor_liquido ?? $nota->valor_servico,
+                'vencimento'    => $vencimento,
+                'descricao'     => 'Pré-lançamento ref. NFS-e (Rascunho #' . $nota->id . ')'
             ]);
         }
     }

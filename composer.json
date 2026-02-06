@@ -15,7 +15,8 @@
         "laravel/tinker": "^2.10.1",
         "nfephp-org/sped-common": "^5.1",
         "ext-simplexml": "*",
-        "ext-zlib": "*"
+        "ext-zlib": "*",
+        "ext-iconv": "*"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

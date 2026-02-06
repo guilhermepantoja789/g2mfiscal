@@ -11,8 +11,8 @@ use NFePHP\Common\Signer;
 
 class TesteEmissaoReal extends Command
 {
-    protected $signature = 'teste:emissao_real {empresa_id}';
-    protected $description = 'Gera XML, Assina, Compacta e Envia para API Nacional';
+    protected $signature = 'fiscal:teste-real {empresa_id}';
+    protected $description = 'Gera XML Blindado e Envia para API Nacional (Homologação)';
 
     public function handle()
     {
@@ -24,11 +24,11 @@ class TesteEmissaoReal extends Command
             return;
         }
 
+        $this->info("=== CORREÇÃO SCHEMA XSD (ORDEM DAS TAGS) ===");
+
         // =================================================================
         // 1. PREPARAÇÃO DO CERTIFICADO
         // =================================================================
-        $this->info("1. Preparando certificado...");
-
         try {
             $pfxContent = Storage::get($empresa->certificado->nome_arquivo);
             $password = $empresa->certificado->senha;
@@ -36,157 +36,88 @@ class TesteEmissaoReal extends Command
 
             $certs = [];
             if (!openssl_pkcs12_read($pfxContent, $certs, $password)) {
-                $this->error("Não foi possível ler o arquivo PFX.");
+                $this->error("Erro PFX.");
                 return;
             }
             $pemContent = $certs['cert'] . "\n" . $certs['pkey'];
             $tempPemPath = tempnam(sys_get_temp_dir(), 'cert_nacional_') . '.pem';
             file_put_contents($tempPemPath, $pemContent);
         } catch (\Exception $e) {
-            $this->error("Erro ao processar certificado: " . $e->getMessage());
+            $this->error("Erro Certificado: " . $e->getMessage());
             return;
         }
 
         // =================================================================
-        // 2. GERAÇÃO DO XML DA DPS
+        // 2. DADOS
         // =================================================================
-        $this->info("2. Gerando XML da DPS...");
+        $serie = '99';
+        $numero = rand(50000, 99999);
+        $dataEmissao = date('Y-m-d\TH:i:sP');
+        $competencia = date('Y-m-d');
 
-        $serie = '1';
-        $numero = rand(1000, 9999);
-        $dataEmissao = date('Y-m-d\TH:i:sP'); // Com Timezone
-        $dataCompetencia = date('Y-m-d');      // Apenas Data
+        $codMun = preg_replace('/\D/', '', $empresa->cod_ibge_mun);
+        $cnpjEmitente = str_pad(preg_replace('/\D/', '', $empresa->cnpj), 14, '0', STR_PAD_LEFT);
+        $imEmitente = str_pad(preg_replace('/\D/', '', $empresa->inscricao_municipal), 15, '0', STR_PAD_LEFT);
 
-        // Dados Fixos para Teste
-        $codMun = '1302603'; // Manaus
-        $tipoInsc = '2';     // CNPJ
-
-        $cnpjLimpo = preg_replace('/[^0-9]/', '', $empresa->cnpj);
-        $cnpjFormatado = str_pad($cnpjLimpo, 14, '0', STR_PAD_LEFT);
         $serieFormatada = str_pad($serie, 5, '0', STR_PAD_LEFT);
         $numeroFormatado = str_pad($numero, 15, '0', STR_PAD_LEFT);
 
-        // ID da DPS
-        $idDps = "DPS{$codMun}{$tipoInsc}{$cnpjFormatado}{$serieFormatada}{$numeroFormatado}";
-        $this->info("ID Gerado: $idDps");
+        $idDps = "DPS{$codMun}2{$cnpjEmitente}{$serieFormatada}{$numeroFormatado}";
 
-        $imLimpa = preg_replace('/[^0-9]/', '', $empresa->inscricao_municipal);
-        $this->info("IM Informada: $imLimpa");
-        // Se estiver vazia para teste, tente descobrir a IM correta.
-        // Manaus geralmente tem IMs de 6 a 7 dígitos.
-        if (empty($imLimpa)) {
-            $this->error("ERRO: Inscrição Municipal é obrigatória para este município!");
-            return;
-        }
+        $this->info("ID DPS: $idDps");
 
-        // XML
-        $xml = '<?xml version="1.0" encoding="UTF-8"?>';
+        // DADOS TOMADOR
+        $docTomador = '06990590000123';
+        $nomeTomador = 'TOMADOR TESTE S.A.';
+        $endCep = '69029130'; $endCmun = '1302603';
+        $endLgr = 'Rua Teste'; $endNro = '100'; $endBairro = 'Centro';
 
-        $xml .= <<<XML
-<DPS xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.00">
-    <infDPS Id="{$idDps}">
-        <tpAmb>2</tpAmb>
-        <dhEmi>{$dataEmissao}</dhEmi>
-        <verAplic>1.0.0</verAplic>
-        <serie>{$serieFormatada}</serie>
-        <nDPS>{$numero}</nDPS>
-        <dCompet>{$dataCompetencia}</dCompet>
-
-        <tpEmit>1</tpEmit>
-        <cLocEmi>{$codMun}</cLocEmi>
-
-        <prest>
-            <CNPJ>{$cnpjFormatado}</CNPJ>
-            <IM>{$imLimpa}</IM>
-
-            <regTrib>
-                <opSimpNac>3</opSimpNac>
-                <regApTribSN>1</regApTribSN>
-                <regEspTrib>0</regEspTrib>
-            </regTrib>
-        </prest>
-
-        <toma>
-            <CNPJ>00000000000191</CNPJ>
-            <xNome>TOMADOR TESTE DE HOMOLOGACAO</xNome>
-        </toma>
-
-        <serv>
-            <locPrest>
-                <cLocPrestacao>{$codMun}</cLocPrestacao>
-            </locPrest>
-
-            <cServ>
-                <cTribNac>010601</cTribNac>
-                <cTribMun>100</cTribMun>
-                <xDescServ>Teste de Emissao API Nacional - G2m Fiscal</xDescServ>
-            </cServ>
-        </serv>
-
-        <valores>
-            <vServPrest>
-                <vServ>10.00</vServ>
-            </vServPrest>
-
-            <trib>
-                <tribMun>
-                    <tribISSQN>1</tribISSQN>
-                    <tpRetISSQN>1</tpRetISSQN>
-                </tribMun>
-
-                <totTrib>
-                    <vTotTrib>
-                        <vTotTribFed>0.00</vTotTribFed>
-                        <vTotTribEst>0.00</vTotTribEst>
-                        <vTotTribMun>0.00</vTotTribMun>
-                    </vTotTrib>
-
-                    </totTrib>
-            </trib>
-        </valores>
-    </infDPS>
-</DPS>
-XML;
+        $nbs = '010601';
+        $desc = $this->sanitize("Teste Emissao API Nacional ID $numero");
+        $valor = '1.00';
 
         // =================================================================
-        // 3. ASSINATURA DO XML
+        // 3. XML (CORREÇÃO DA ORDEM DAS TAGS)
         // =================================================================
-        $this->info("3. Assinando XML...");
 
+        // CORREÇÃO CRÍTICA: <endNac> DEVE VIR PRIMEIRO!
+        // Ordem Correta: endNac -> xLgr -> nro -> xCpl -> xBairro
+        $tagEndereco = "<end><endNac><cMun>{$endCmun}</cMun><CEP>{$endCep}</CEP></endNac><xLgr>{$endLgr}</xLgr><nro>{$endNro}</nro><xBairro>{$endBairro}</xBairro></end>";
+
+        // TRIBUTOS (Mantendo ordem padrão: tribISSQN -> tpRetISSQN -> pAliq)
+        $tagTrib = "<trib><tribMun><tribISSQN>1</tribISSQN><tpRetISSQN>1</tpRetISSQN></tribMun><totTrib><vTotTrib><vTotTribFed>0.00</vTotTribFed><vTotTribEst>0.00</vTotTribEst><vTotTribMun>0.00</vTotTribMun></vTotTrib></totTrib></trib>";
+
+        $xml = "<DPS xmlns=\"http://www.sped.fazenda.gov.br/nfse\" versao=\"1.00\"><infDPS Id=\"{$idDps}\"><tpAmb>2</tpAmb><dhEmi>{$dataEmissao}</dhEmi><verAplic>1.0.0</verAplic><serie>{$serieFormatada}</serie><nDPS>{$numero}</nDPS><dCompet>{$competencia}</dCompet><tpEmit>1</tpEmit><cLocEmi>{$codMun}</cLocEmi><prest><CNPJ>{$cnpjEmitente}</CNPJ><IM>{$imEmitente}</IM><regTrib><opSimpNac>3</opSimpNac><regApTribSN>1</regApTribSN><regEspTrib>0</regEspTrib></regTrib></prest><toma><CNPJ>{$docTomador}</CNPJ><xNome>{$nomeTomador}</xNome>{$tagEndereco}</toma><serv><locPrest><cLocPrestacao>{$codMun}</cLocPrestacao></locPrest><cServ><cTribNac>{$nbs}</cTribNac><cTribMun>100</cTribMun><xDescServ>{$desc}</xDescServ></cServ></serv><valores><vServPrest><vServ>{$valor}</vServ></vServPrest>{$tagTrib}</valores></infDPS></DPS>";
+
+        // =================================================================
+        // 4. ASSINATURA
+        // =================================================================
         try {
-            $xmlAssinado = Signer::sign(
-                $certificate,
-                $xml,
-                'infDPS',
-                'Id',
-                OPENSSL_ALGO_SHA1,
-                [false, false, null, null]
-            );
-
-            // Garante cabeçalho
+            $xmlAssinado = Signer::sign($certificate, $xml, 'infDPS', 'Id', OPENSSL_ALGO_SHA1, [false, false, null, null]);
             if (!str_starts_with($xmlAssinado, '<?xml')) {
                 $xmlAssinado = '<?xml version="1.0" encoding="UTF-8"?>' . $xmlAssinado;
             }
         } catch (\Exception $e) {
-            $this->error("Erro na assinatura: " . $e->getMessage());
+            $this->error("Erro Assinatura: " . $e->getMessage());
             return;
         }
 
         // =================================================================
-        // 4. PAYLOAD E ENVIO
+        // 5. ENVIO
         // =================================================================
-        $this->info("4. Preparando Payload...");
         $xmlGzip = gzencode(trim($xmlAssinado), 9);
         $xmlBase64 = base64_encode($xmlGzip);
 
-        $url = config('services.nfse_nacional.url_sefin');
-        $this->info("5. Enviando para: $url");
+        $url = 'https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse';
+        $this->info("Enviando para: $url");
 
         try {
             $response = Http::withOptions([
                 'cert' => $tempPemPath,
                 'verify' => false,
-                'headers' => ['Content-Type' => 'application/json', 'Authorization' => 'Bearer']
+                'headers' => [
+                    'Content-Type' => 'application/json'
+                ]
             ])->post($url, ['dpsXmlGZipB64' => $xmlBase64]);
 
             if (file_exists($tempPemPath)) @unlink($tempPemPath);
@@ -194,24 +125,29 @@ XML;
             $status = $response->status();
             $body = $response->json();
 
-            $this->line("------------------------------------------------");
-            $this->info("HTTP STATUS: " . $status);
+            $this->line("\n================ RESULTADO ($status) ================");
 
-            if ($status == 200 || $status == 201) {
-                $this->info("SUCESSO!");
-                $this->info("Chave: " . ($body['chaveAcesso'] ?? ''));
+            if ($status != 200 && $status != 201) {
+                $this->error("❌ FALHA:");
+                $this->line(json_encode($body, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
             } else {
-                $this->error("ERRO:");
-                // Exibe JSON bonito se possível, senão texto bruto
-                if ($body) {
-                    $this->line(json_encode($body, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-                } else {
-                    $this->line($response->body());
-                }
+                $this->info("✅ SUCESSO!");
+                $this->info("Chave: " . ($body['chaveAcesso'] ?? ''));
+                $this->line("XML Retorno: " . ($body['nfseXmlGZipB64'] ?? ''));
             }
 
         } catch (\Exception $e) {
-            $this->error("FALHA: " . $e->getMessage());
+            $this->error("Exception HTTP: " . $e->getMessage());
         }
+    }
+
+    private function sanitize($string)
+    {
+        if (empty($string)) return '';
+        $string = strval($string);
+        $string = str_replace(["\r\n", "\r", "\n"], " ", $string);
+        $clean = iconv('UTF-8', 'ASCII//TRANSLIT', $string);
+        if ($clean === false) $clean = preg_replace('/[^\x20-\x7E]/', '', $string);
+        return preg_replace('/[^a-zA-Z0-9\s\-\.\,\/\:\;]/', '', $clean);
     }
 }

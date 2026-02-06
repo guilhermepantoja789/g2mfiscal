@@ -93,4 +93,9 @@ class NotaFiscal extends Model
             default => 'bg-gray-100 text-gray-800', // Rascunho
         };
     }
+
+    public function cobranca()
+    {
+        return $this->hasOne(Cobranca::class, 'nota_fiscal_id');
+    }
 }

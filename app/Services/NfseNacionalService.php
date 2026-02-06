@@ -60,6 +60,20 @@ class NfseNacionalService
     {
         try {
             $xmlAssinado = $this->gerarXmlAssinado($dadosNota);
+
+            // DEBUG PARA CRON TASK DAS RECORRENCIAS //
+
+//            if (app()->runningInConsole()) {
+//                echo "\n" . str_repeat('=', 40) . "\n";
+//                echo " XML QUE SERÁ ENVIADO (DEBUG): \n";
+//                echo str_repeat('=', 40) . "\n";
+//                echo $xmlAssinado;
+//                echo "\n" . str_repeat('=', 40) . "\n";
+//                die(); // Para o script aqui
+//            } else {
+//                dd($xmlAssinado); // Se for via navegador, mostra na tela
+//            }
+
             $xmlGzip = gzencode(trim($xmlAssinado), 9);
             $xmlBase64 = base64_encode($xmlGzip);
 
@@ -67,7 +81,7 @@ class NfseNacionalService
 
             $response = Http::withOptions([
                 'cert' => $this->tempPemPath,
-                'verify' => false,
+                'verify' => true,
                 'headers' => ['Content-Type' => 'application/json']
             ])->post($url, ['dpsXmlGZipB64' => $xmlBase64]);
 
@@ -93,7 +107,7 @@ class NfseNacionalService
 
             $response = Http::withOptions([
                 'cert' => $this->tempPemPath,
-                'verify' => false,
+                'verify' => true,
                 'headers' => ['Content-Type' => 'application/json']
             ])->get($urlConsulta);
 
@@ -117,6 +131,7 @@ class NfseNacionalService
             return [
                 'sucesso' => false,
                 'mensagem' => "Erro HTTP $status: " . ($response->json()['message'] ?? $body),
+
                 'detalhes' => $body
             ];
         }
@@ -180,82 +195,108 @@ class NfseNacionalService
         return ['sucesso' => false, 'mensagem' => 'Resposta desconhecida', 'body_bruto' => $body];
     }
 
+    protected function sanitize($string)
+    {
+        if (empty($string)) return '';
+        $string = strval($string);
+
+        // 1. Substitui Quebra de Linha por " - "
+        $string = str_replace(["\r\n", "\r", "\n"], " - ", $string);
+
+        // 2. Remove acentos (Transliteração segura)
+        $clean = iconv('UTF-8', 'ASCII//TRANSLIT', $string);
+        if ($clean === false) {
+            $clean = preg_replace('/[^\x20-\x7E]/', '', $string);
+        }
+
+        // 3. Mantém apenas Letras, Números e Pontuação Básica
+        return preg_replace('/[^a-zA-Z0-9\s\-\.\,\/\:\;]/', '', $clean);
+    }
+
     protected function gerarXmlAssinado(array $dados)
     {
-        $codMun = $this->empresa->cod_ibge_mun;
-        $cnpjEmitente = str_pad(preg_replace('/[^0-9]/', '', $this->empresa->cnpj), 14, '0', STR_PAD_LEFT);
-        $imEmitente   = preg_replace('/[^0-9]/', '', $this->empresa->inscricao_municipal);
-        $opSimpNac = $this->empresa->regime_tributario;
+        // 1. Dados do Emitente
+        $codMun = preg_replace('/\D/', '', $this->empresa->cod_ibge_mun);
+        $cnpjEmitente = str_pad(preg_replace('/\D/', '', $this->empresa->cnpj), 14, '0', STR_PAD_LEFT);
+        $imEmitente   = preg_replace('/\D/', '', $this->empresa->inscricao_municipal);
 
+        $opSimpNac = $this->empresa->regime_tributario;
         $tagRegApTribSN = '';
         if ($opSimpNac == '3' || $opSimpNac == 'Simples Nacional') {
             $opSimpNac = '3';
-            $regApTribSN = $this->empresa->regime_apuracao_sn;
+            $regApTribSN = $this->empresa->regime_apuracao_sn ?: '1';
             $tagRegApTribSN = "<regApTribSN>{$regApTribSN}</regApTribSN>";
         }
-
         $tagRegEspTrib = "<regEspTrib>0</regEspTrib>";
 
-        $docTomador = preg_replace('/[^0-9]/', '', $dados['tomador_doc']);
-        if (strlen($docTomador) == 11) {
-            $tagTomador = "<CPF>{$docTomador}</CPF>";
-        } else {
+        // 2. Dados do Tomador
+        $docTomador = preg_replace('/\D/', '', $dados['tomador_doc']);
+        if (strlen($docTomador) > 11) {
             $docTomador = str_pad($docTomador, 14, '0', STR_PAD_LEFT);
             $tagTomador = "<CNPJ>{$docTomador}</CNPJ>";
+        } else {
+            $tagTomador = "<CPF>{$docTomador}</CPF>";
         }
 
-        $tagEnderTomador = '';
-        if (!empty($dados['tomador_cep']) && !empty($dados['tomador_cidade_codigo'])) {
-            $end_cep    = preg_replace('/[^0-9]/', '', $dados['tomador_cep']);
-            $end_lgr    = substr($dados['tomador_endereco'], 0, 255);
-            $end_nro    = substr($dados['tomador_numero'] ?? 'S/N', 0, 60);
-            $end_bairro = substr($dados['tomador_bairro'] ?? 'Centro', 0, 60); // Fallback para bairro
-            $end_cmun   = preg_replace('/[^0-9]/', '', $dados['tomador_cidade_codigo']);
-            $tagCpl     = !empty($dados['tomador_complemento']) ? "<xCpl>".substr($dados['tomador_complemento'], 0, 156)."</xCpl>" : "";
+        // --- SANITIZAÇÃO (CRUCIAL PARA EVITAR E999) ---
+        $nomeTomador = $this->sanitize($dados['tomador_nome']);
+        $endLgr      = $this->sanitize($dados['tomador_endereco']);
+        $endNro      = $this->sanitize($dados['tomador_numero'] ?? 'SN');
+        $endBairro   = $this->sanitize($dados['tomador_bairro'] ?? 'Centro');
+        $endCep      = preg_replace('/\D/', '', $dados['tomador_cep']);
+        $endCmun     = preg_replace('/\D/', '', $dados['tomador_cidade_codigo']);
+        $tagCpl      = !empty($dados['tomador_complemento']) ? "<xCpl>".$this->sanitize($dados['tomador_complemento'])."</xCpl>" : "";
 
-            // XML do Endereço (Corrigido: xBairro incluído)
-            $tagEnderTomador = "<end>
-                <endNac>
-                    <cMun>{$end_cmun}</cMun>
-                    <CEP>{$end_cep}</CEP>
-                </endNac>
-                <xLgr>{$end_lgr}</xLgr>
-                <nro>{$end_nro}</nro>
-                {$tagCpl}
-                <xBairro>{$end_bairro}</xBairro>
-            </end>";
-        }
+        $tagEnderTomador = "<end>
+            <endNac>
+                <cMun>{$endCmun}</cMun>
+                <CEP>{$endCep}</CEP>
+            </endNac>
+            <xLgr>{$endLgr}</xLgr>
+            <nro>{$endNro}</nro>
+            {$tagCpl}
+            <xBairro>{$endBairro}</xBairro>
+        </end>";
 
-        $serieFormatada = str_pad($dados['serie'], 5, '0', STR_PAD_LEFT);
+        // 3. Dados de Identificação (Série e Número)
+        // LÓGICA DE SÉRIE: Se for produção, usa a original. Se for teste, força 2.
+        $ambienteProd = config('app.env') === 'production';
+        $serieNum = $ambienteProd ? $dados['serie'] : '99';
+
+        $serieFormatada = str_pad($serieNum, 5, '0', STR_PAD_LEFT);
         $nDPS_ID = str_pad($dados['numero'], 15, '0', STR_PAD_LEFT);
         $nDPS_XML = (int)$dados['numero'];
         $dataEmissao = date('Y-m-d\TH:i:sP');
         $competencia = $dados['competencia'];
-        $tpAmb = config('app.env') === 'production' ? '1' : '2';
+        $tpAmb = $ambienteProd ? '1' : '2';
 
-        $tribISSQN = $dados['tributacao_iss'] ?? '1';
-        $tpRetISSQN = $dados['retencao_iss'] ?? '1';
-
-        // --- TAG pAliq (Alíquota ISS) ---
-        // Obrigatória se houver retenção (2 ou 3)
-        $tagPAliq = '';
-        if ($tpRetISSQN == 2 || $tpRetISSQN == 3) {
-            // Usa 'aliquota' que vem do controller (que é o p_tot_trib_mun)
-            $aliqVal = number_format($dados['aliquota'] ?? 2.00, 2, '.', '');
-            $tagPAliq = "<pAliq>{$aliqVal}</pAliq>";
-        }
-
-        // Transparência
-        $vTotTribFed = number_format($dados['v_tot_trib_fed'] ?? 0, 2, '.', '');
-        $vTotTribEst = number_format($dados['v_tot_trib_est'] ?? 0, 2, '.', '');
-        $vTotTribMun = number_format($dados['v_tot_trib_mun'] ?? 0, 2, '.', '');
-
-        $valorServico = number_format($dados['valor'], 2, '.', '');
-        $cTribNac = preg_replace('/[^0-9]/', '', $dados['servico_nbs']);
-        $cTribMun = preg_replace('/[^0-9]/', '', $dados['servico_municipal']);
-
+        // ID da DPS (Com dígito 2 fixo para CNPJ)
         $idDps = "DPS{$codMun}2{$cnpjEmitente}{$serieFormatada}{$nDPS_ID}";
 
+        // 4. Dados do Serviço
+        $descServico = $this->sanitize($dados['discriminacao']); // Remove ENTER
+
+        // Garante 6 dígitos no NBS (10301 -> 010301)
+        $cTribNacRaw = preg_replace('/\D/', '', $dados['servico_nbs']);
+        $cTribNac = str_pad($cTribNacRaw, 6, '0', STR_PAD_LEFT);
+
+        $cTribMun = preg_replace('/\D/', '', $dados['servico_municipal']);
+
+        $valServ = number_format($dados['valor'], 2, '.', '');
+        $tribISS = $dados['tributacao_iss'];
+        $retISS  = $dados['retencao_iss'];
+
+        $tagPAliq = '';
+        if ($retISS == 2 || $retISS == 3) {
+            $aliq = number_format($dados['aliquota'] ?? 2.00, 2, '.', '');
+            $tagPAliq = "<pAliq>{$aliq}</pAliq>";
+        }
+
+        $vFed = number_format($dados['v_tot_trib_fed'] ?? 0, 2, '.', '');
+        $vEst = number_format($dados['v_tot_trib_est'] ?? 0, 2, '.', '');
+        $vMun = number_format($dados['v_tot_trib_mun'] ?? 0, 2, '.', '');
+
+        // 5. Montagem do XML
         $xml = <<<XML
 <DPS xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.00">
     <infDPS Id="{$idDps}">
@@ -278,7 +319,7 @@ class NfseNacionalService
         </prest>
         <toma>
             {$tagTomador}
-            <xNome>{$dados['tomador_nome']}</xNome>
+            <xNome>{$nomeTomador}</xNome>
             {$tagEnderTomador}
         </toma>
         <serv>
@@ -286,22 +327,22 @@ class NfseNacionalService
             <cServ>
                 <cTribNac>{$cTribNac}</cTribNac>
                 <cTribMun>{$cTribMun}</cTribMun>
-                <xDescServ>{$dados['discriminacao']}</xDescServ>
+                <xDescServ>{$descServico}</xDescServ>
             </cServ>
         </serv>
         <valores>
-            <vServPrest><vServ>{$valorServico}</vServ></vServPrest>
+            <vServPrest><vServ>{$valServ}</vServ></vServPrest>
             <trib>
                 <tribMun>
-                    <tribISSQN>{$tribISSQN}</tribISSQN>
-                    <tpRetISSQN>{$tpRetISSQN}</tpRetISSQN>
+                    <tribISSQN>{$tribISS}</tribISSQN>
+                    <tpRetISSQN>{$retISS}</tpRetISSQN>
                     {$tagPAliq}
                 </tribMun>
                 <totTrib>
                     <vTotTrib>
-                        <vTotTribFed>{$vTotTribFed}</vTotTribFed>
-                        <vTotTribEst>{$vTotTribEst}</vTotTribEst>
-                        <vTotTribMun>{$vTotTribMun}</vTotTribMun>
+                        <vTotTribFed>{$vFed}</vTotTribFed>
+                        <vTotTribEst>{$vEst}</vTotTribEst>
+                        <vTotTribMun>{$vMun}</vTotTribMun>
                     </vTotTrib>
                 </totTrib>
             </trib>
@@ -310,7 +351,8 @@ class NfseNacionalService
 </DPS>
 XML;
 
-        $xmlAssinado = Signer::sign($this->certificate, $xml, 'infDPS', 'Id', OPENSSL_ALGO_SHA1, [false, false, null, null]);
+        // 6. Assinatura
+        $xmlAssinado = Signer::sign($this->certificate, $xml, 'infDPS', 'Id', OPENSSL_ALGO_SHA256, [false, false, null, null]);
 
         if (!str_starts_with($xmlAssinado, '<?xml')) {
             return '<?xml version="1.0" encoding="UTF-8"?>' . $xmlAssinado;
@@ -343,7 +385,7 @@ XML;
         try {
             $response = Http::withOptions([
                 'cert' => $this->tempPemPath,
-                'verify' => false,
+                'verify' => true,
                 'timeout' => 30
             ])->get($url, [
                 'codMunicipio' => $codMun,
@@ -412,7 +454,7 @@ XML;
         try {
             $response = Http::withOptions([
                 'cert' => $this->tempPemPath,
-                'verify' => false,
+                'verify' => true,
                 'timeout' => 60,
             ])->get($url);
 
