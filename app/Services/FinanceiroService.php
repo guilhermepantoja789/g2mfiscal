@@ -5,9 +5,16 @@ namespace App\Services;
 use App\Models\Cobranca;
 use App\Models\NotaFiscal;
 use Illuminate\Support\Facades\Log;
+use App\Services\AsaasService;
 
 class FinanceiroService
 {
+    protected $asaasService;
+
+    public function __construct(AsaasService $asaasService)
+    {
+        $this->asaasService = $asaasService;
+    }
     /**
      * Cria uma cobrança vinculada a uma Nota Fiscal (Estado Inicial: RASCUNHO)
      */
@@ -59,6 +66,55 @@ class FinanceiroService
                 'vencimento'    => $vencimento,
                 'descricao'     => 'Pré-lançamento ref. NFS-e (Rascunho #' . $nota->id . ')'
             ]);
+            
+            // Se já estiver PENDING (emitida), talvez devêssemos atualizar no Asaas também?
+            // Fica como melhoria futura (PUT /payments/{id})
         }
+    }
+
+    /**
+     * Ativa a cobrança no gateway (RASCUNHO -> PENDING)
+     */
+    public function ativarCobranca(Cobranca $cobranca)
+    {
+        if ($cobranca->status !== 'RASCUNHO') return;
+
+        try {
+            // 1. Cria no Asaas
+            $dadosAsaas = $this->asaasService->criarCobranca($cobranca);
+
+            // 2. Calcula Valor Líquido (Simulação de Taxa: R$ 1,99 + 0%)
+            $valorLiquido = $this->calcularValorLiquido($cobranca->valor);
+
+            // 3. Atualiza Local
+            $cobranca->update([
+                'status' => 'PENDING',
+                'external_id' => $dadosAsaas['id'],
+                'link_boleto' => $dadosAsaas['bankSlipUrl'] ?? null,
+                'pix_qrcode' => $dadosAsaas['pixQrCode'] ?? null,
+                'valor_liquido' => $valorLiquido
+            ]);
+
+            Log::info("Cobrança #{$cobranca->id} ativada no Asaas ID: {$dadosAsaas['id']}");
+
+        } catch (\Exception $e) {
+            Log::error("Erro ao ativar cobrança #{$cobranca->id}: " . $e->getMessage());
+            // Não lançamos erro para não travar a emissão da nota, mas logamos
+        }
+    }
+
+    /**
+     * Calcula o valor líquido descontando taxas do gateway
+     */
+    public function calcularValorLiquido(float $valorBruto): float
+    {
+        // Exemplo: Taxa fixa de R$ 1,99 por boleto/pix
+        $taxaFixa = 1.99;
+        
+        // Exemplo: Taxa percentual (ex: 1.99%)
+        // $taxaPercentual = 0.0199;
+        // $desconto = $valorBruto * $taxaPercentual;
+
+        return max(0, $valorBruto - $taxaFixa);
     }
 }

@@ -22,3 +22,7 @@ Schedule::command('fiscal:processar-recorrencias')
     ->dailyAt('23:20')
     ->timezone('America/Manaus')
     ->appendOutputTo(storage_path('logs/recorrencias.log'));
+Schedule::command('fiscal:verificar-cobrancas-vencidas')
+    ->dailyAt('00:01')
+    ->timezone('America/Manaus')
+    ->appendOutputTo(storage_path('logs/financeiro_vencimentos.log'));

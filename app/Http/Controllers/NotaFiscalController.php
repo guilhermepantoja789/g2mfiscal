@@ -452,11 +452,17 @@ class NotaFiscalController extends Controller
 
                 // === ATIVAÇÃO FINANCEIRA ===
                 // Se houver cobrança em RASCUNHO, ativa para PENDING (A Receber)
-                if ($nota->cobranca && $nota->cobranca->status === 'RASCUNHO') {
-                    $nota->cobranca->update([
-                        'status' => 'PENDING',
-                        'descricao' => 'Ref. NFS-e Nº ' . $retorno['numero_nota']
-                    ]);
+                if ($nota->cobranca) {
+                     // Injeta o service via container (ou poderia ser via parâmetro method injection)
+                     $financeiroService = app(FinanceiroService::class);
+                     $financeiroService->ativarCobranca($nota->cobranca);
+                     
+                     // Atualiza descrição localmente também se o service não o fizer (o service faz, mas garantimos refresh se precisar)
+                     if($nota->cobranca->descricao == 'Ref. NFS-e Nº ' . $retorno['numero_nota']) {
+                        // já atualizado
+                     } else {
+                         $nota->cobranca->update(['descricao' => 'Ref. NFS-e Nº ' . $retorno['numero_nota']]);
+                     }
                 }
 
                 return redirect()->route('notas.show', $nota->id)

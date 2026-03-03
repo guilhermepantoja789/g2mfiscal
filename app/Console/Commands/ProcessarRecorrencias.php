@@ -7,6 +7,7 @@ use App\Models\Recorrencia;
 use App\Models\NotaFiscal;
 use App\Models\Cliente;
 use App\Services\NfseNacionalService;
+use App\Services\FinanceiroService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -126,14 +127,31 @@ class ProcessarRecorrencias extends Command
                 $this->info("   -> Nota #{$nota->id} criada.");
 
                 // ---------------------------------------------------------
-                // PASSO D: EMITIR (SE AUTO)
+                // PASSO D: GERAR COBRANÇA (RASCUNHO)
+                // ---------------------------------------------------------
+                // Gap 1 Corrigido: Agora geramos a cobrança vinculada
+                $financeiroService = app(FinanceiroService::class);
+                try {
+                    // Define vencimento padrão (ex: 5 dias após emissão ou usar configuração da recorrência se houver)
+                    // Por simplicidade, vamos usar proxima_execucao + 5 dias, ou hoje + 5 dias
+                    $vencimento = Carbon::parse($rec->proxima_execucao)->addDays(5);
+                    
+                    $financeiroService->gerarCobrancaDeNota($nota, $vencimento);
+                    $this->info("   -> Cobrança (Rascunho) gerada.");
+                } catch (\Exception $e) {
+                    Log::error("ERRO ao gerar cobrança para nota {$nota->id}: " . $e->getMessage());
+                    $this->error("   -> Falha ao gerar cobrança: " . $e->getMessage());
+                }
+
+                // ---------------------------------------------------------
+                // PASSO E: EMITIR (SE AUTO)
                 // ---------------------------------------------------------
                 if ($rec->emitir_automaticamente) {
                     $this->emitirNotaAutomaticamente($nota);
                 }
 
                 // ---------------------------------------------------------
-                // PASSO E: PRÓXIMA DATA
+                // PASSO F: PRÓXIMA DATA
                 // ---------------------------------------------------------
                 $this->atualizarProximaData($rec);
 
@@ -200,6 +218,16 @@ class ProcessarRecorrencias extends Command
                     'chave_acesso' => $retorno['chave_acesso'] ?? null,
                     'xml_autorizado' => $retorno['xml_autorizado']
                 ]);
+
+                // Gap 2 Corrigido: Ativar a cobrança
+                if ($nota->cobranca) {
+                    $financeiroService = app(FinanceiroService::class);
+                    $financeiroService->ativarCobranca($nota->cobranca);
+                    
+                    $nota->cobranca->update(['descricao' => 'Ref. NFS-e Nº ' . $retorno['numero_nota']]);
+                    $this->info("   -> Cobrança ativada (PENDING).");
+                }
+
                 $this->info("   -> SUCESSO! Nota: " . $retorno['numero_nota']);
             } else {
                 $msg = $retorno['mensagem'];

@@ -420,9 +420,8 @@ XML;
 
             if ($imEncontrada) {
                 $imLimpa = preg_replace('/[^0-9]/', '', $imEncontrada);
-                $imFormatada = str_pad($imLimpa, 15, '0', STR_PAD_LEFT);
                 return [
-                    'im' => $imFormatada,
+                    'im' => $imLimpa,
                     'situacao' => $situacaoEncontrada
                 ];
             }

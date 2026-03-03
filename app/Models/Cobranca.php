@@ -66,4 +66,9 @@ class Cobranca extends Model
     {
         return $this->belongsTo(Cliente::class);
     }
+
+    public function empresa()
+    {
+        return $this->belongsTo(Empresa::class);
+    }
 }
