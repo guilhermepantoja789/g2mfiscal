@@ -42,6 +42,7 @@ Route::middleware(['auth', 'verified'])->prefix('app')->group(function () {
     Route::get('/notas/{id}/imprimir', [NotaFiscalController::class, 'imprimir'])->name('notas.imprimir');
     Route::get('/notas/{id}/danfse-oficial', [NotaFiscalController::class, 'baixarDanfseOficial'])->name('notas.danfse_oficial');
     Route::post('/notas/{id}/emitir', [NotaFiscalController::class, 'emitir'])->name('notas.emitir');
+    Route::delete('/notas/{id}', [NotaFiscalController::class, 'destroy'])->name('notas.destroy');
 
     // --- CADASTROS ---
     Route::resource('clientes', ClienteController::class);

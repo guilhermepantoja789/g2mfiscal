@@ -10,6 +10,7 @@ use App\Models\Empresa;
 use App\Services\NfseNacionalService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use App\Http\Requests\NotaFiscalRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
 
@@ -75,64 +76,10 @@ class NotaFiscalController extends Controller
     /**
      * Salvar Nota (Com lógica de impostos e atualização de cliente)
      */
-    public function store(Request $request, FinanceiroService $financeiroService)
+    public function store(NotaFiscalRequest $request, FinanceiroService $financeiroService)
     {
         $empresaId = session('empresa_ativa');
         $data = $request->all();
-
-        // 1. LIMPEZA DE MÁSCARAS (Moeda e Porcentagem)
-        $camposMonetarios = [
-            'valor_servico',
-            'v_tot_trib_fed', 'v_tot_trib_est', 'v_tot_trib_mun',
-            'p_tot_trib_fed', 'p_tot_trib_est', 'p_tot_trib_mun',
-            'aliquota_iss' // Caso venha do form
-        ];
-
-        foreach ($camposMonetarios as $campo) {
-            if (!empty($data[$campo])) {
-                // Remove ponto de milhar e troca vírgula decimal por ponto
-                $data[$campo] = str_replace('.', '', $data[$campo]);
-                $data[$campo] = str_replace(',', '.', $data[$campo]);
-            } else {
-                $data[$campo] = 0;
-            }
-        }
-
-        // Limpeza de CNPJ
-        if(!empty($data['tomador_cnpj'])) {
-            $data['tomador_cnpj'] = preg_replace('/\D/', '', $data['tomador_cnpj']);
-        }
-
-        // AUTO-CÁLCULO: Se % preenchida mas valor zerado, calcula automaticamente
-        $valorBase = (float)($data['valor_servico'] ?? 0);
-        $paresToTrib = [
-            ['p_tot_trib_fed', 'v_tot_trib_fed'],
-            ['p_tot_trib_est', 'v_tot_trib_est'],
-            ['p_tot_trib_mun', 'v_tot_trib_mun'],
-        ];
-        foreach ($paresToTrib as [$campoPct, $campoVal]) {
-            $pct = (float)($data[$campoPct] ?? 0);
-            $val = (float)($data[$campoVal] ?? 0);
-            if ($pct > 0 && $val == 0 && $valorBase > 0) {
-                $data[$campoVal] = round($valorBase * $pct / 100, 2);
-            }
-        }
-
-        // Atualiza o request com os dados limpos para validação
-        $request->merge($data);
-
-        // 2. VALIDAÇÃO
-        $request->validate([
-            'tomador_cnpj'   => 'required|digits_between:11,14',
-            'tomador_nome'   => 'required|string|max:255',
-            'valor_servico'  => 'required|numeric|min:0.01',
-            'emissao'        => 'required|date',
-            'descricao'      => 'required|string|min:5',
-            'trib_issqn'     => 'required|integer',
-            'tp_ret_issqn'   => 'required|integer',
-            // Validação condicional do vencimento
-            'vencimento'     => 'required_if:gerar_cobranca,1|date|nullable|after_or_equal:today',
-        ]);
 
         DB::beginTransaction();
 
@@ -241,7 +188,7 @@ class NotaFiscalController extends Controller
     /**
      * Atualiza a Nota no Banco
      */
-    public function update(Request $request, $id, FinanceiroService $financeiroService)
+    public function update(NotaFiscalRequest $request, $id, FinanceiroService $financeiroService)
     {
         $empresaId = session('empresa_ativa');
         $nota = NotaFiscal::where('empresa_id', $empresaId)->with('cobranca')->findOrFail($id);
@@ -252,58 +199,6 @@ class NotaFiscalController extends Controller
         }
 
         $data = $request->all();
-
-        // 2. Limpeza de Máscaras (Dinheiro e %)
-        $camposMonetarios = [
-            'valor_servico',
-            'aliquota_iss',
-            'v_tot_trib_fed', 'v_tot_trib_est', 'v_tot_trib_mun',
-            'p_tot_trib_fed', 'p_tot_trib_est', 'p_tot_trib_mun'
-        ];
-
-        foreach ($camposMonetarios as $campo) {
-            if (!empty($data[$campo])) {
-                $data[$campo] = str_replace('.', '', $data[$campo]);
-                $data[$campo] = str_replace(',', '.', $data[$campo]);
-            } else {
-                $data[$campo] = 0;
-            }
-        }
-
-        if(!empty($data['tomador_cnpj'])) {
-            $data['tomador_cnpj'] = preg_replace('/\D/', '', $data['tomador_cnpj']);
-        }
-
-        // AUTO-CÁLCULO: Se % preenchida mas valor zerado, calcula automaticamente
-        $valorBase = (float)($data['valor_servico'] ?? 0);
-        $paresToTrib = [
-            ['p_tot_trib_fed', 'v_tot_trib_fed'],
-            ['p_tot_trib_est', 'v_tot_trib_est'],
-            ['p_tot_trib_mun', 'v_tot_trib_mun'],
-        ];
-        foreach ($paresToTrib as [$campoPct, $campoVal]) {
-            $pct = (float)($data[$campoPct] ?? 0);
-            $val = (float)($data[$campoVal] ?? 0);
-            if ($pct > 0 && $val == 0 && $valorBase > 0) {
-                $data[$campoVal] = round($valorBase * $pct / 100, 2);
-            }
-        }
-
-        // Atualiza request para validação funcionar
-        $request->merge($data);
-
-        // 3. Validação
-        $request->validate([
-            'tomador_cnpj'   => 'required|digits_between:11,14',
-            'tomador_nome'   => 'required|string|max:255',
-            'valor_servico'  => 'required|numeric|min:0.01',
-            'emissao'        => 'required|date',
-            'descricao'      => 'required|string|min:5',
-            'trib_issqn'     => 'required|integer',
-            'tp_ret_issqn'   => 'required|integer',
-            // Validação Financeira Condicional
-            'vencimento'     => 'required_if:gerar_cobranca,1|date|nullable|after_or_equal:today',
-        ]);
 
         DB::beginTransaction();
 
@@ -417,112 +312,19 @@ class NotaFiscalController extends Controller
         }
 
         try {
-            // Atualiza para evitar duplo clique
+            // Atualiza para evitar duplo clique e indica que está na fila
             $nota->update(['status' => 'processando']);
 
-            $service = new NfseNacionalService($nota->empresa);
+            \App\Jobs\EmitirNotaFiscalJob::dispatch($nota);
 
-            // 3. Montagem do Payload
-            // Define a alíquota: usa a do banco (p_tot_trib_mun) ou padrão 2.00
-            $aliqVal = ($nota->p_tot_trib_mun > 0) ? $nota->p_tot_trib_mun : 2.00;
-
-            $dados = [
-                'numero' => $nota->id,
-                // Lógica de Série: Produção = 1, Teste = 99
-                'serie' => config('app.env') === 'production' ? '1' : '99',
-                'competencia' => $nota->emissao->format('Y-m-d'),
-
-                'tomador_doc' => $nota->tomador_cnpj,
-                'tomador_nome' => $nota->tomador_nome,
-                'tomador_email' => $nota->tomador_email,
-
-                // Endereço do Cliente (Fallbacks seguros)
-                'tomador_endereco' => $nota->cliente->logradouro ?? 'Endereço não inf.',
-                'tomador_numero' => $nota->cliente->numero ?? 'S/N',
-                'tomador_bairro' => $nota->cliente->bairro ?? 'Centro',
-                'tomador_cep' => $nota->cliente->cep ?? '69000000',
-                'tomador_cidade_codigo' => $nota->cliente->cidade_codigo ?? '1302603', // Padrão Manaus se vazio
-                'tomador_uf' => $nota->cliente->uf ?? 'AM',
-                'tomador_complemento' => $nota->cliente->complemento ?? '',
-
-                'valor' => $nota->valor_servico,
-                'discriminacao' => $nota->descricao,
-                'tributacao_iss' => $nota->trib_issqn,
-                'retencao_iss' => $nota->tp_ret_issqn,
-
-                'servico_nbs' => $codNbs,
-                'servico_municipal' => $codMun,
-
-                'aliquota' => $aliqVal,
-
-                'v_tot_trib_fed' => $nota->v_tot_trib_fed,
-                'v_tot_trib_est' => $nota->v_tot_trib_est,
-                'v_tot_trib_mun' => $nota->v_tot_trib_mun,
-            ];
-
-            // 4. Chamada ao Serviço Nacional
-            $retorno = $service->emitirNota($dados);
-
-            // Salva XML enviado se disponível (mesmo se der erro depois)
-            if (isset($retorno['xml_dps_enviado'])) {
-                $nota->xml_enviado = $retorno['xml_dps_enviado'];
-                $nota->save();
-            }
-
-            // 5. Processamento do Retorno
-            if ($retorno['sucesso']) {
-                $nota->update([
-                    'status' => 'autorizada',
-                    'numero_nfse' => $retorno['numero_nota'],
-                    'codigo_verificacao' => $retorno['codigo_verificacao'] ?? null,
-                    'chave_acesso' => $retorno['chave_acesso'] ?? null,
-                    'xml_autorizado' => $retorno['xml_autorizado'],
-                    'mensagem_erro' => null // Limpa erro anterior
-                ]);
-
-                // === ATIVAÇÃO FINANCEIRA ===
-                // Se houver cobrança em RASCUNHO, ativa para PENDING (A Receber)
-                if ($nota->cobranca) {
-                     // Injeta o service via container (ou poderia ser via parâmetro method injection)
-                     $financeiroService = app(FinanceiroService::class);
-                     $financeiroService->ativarCobranca($nota->cobranca);
-                     
-                     // Atualiza descrição localmente também se o service não o fizer (o service faz, mas garantimos refresh se precisar)
-                     if($nota->cobranca->descricao == 'Ref. NFS-e Nº ' . $retorno['numero_nota']) {
-                        // já atualizado
-                     } else {
-                         $nota->cobranca->update(['descricao' => 'Ref. NFS-e Nº ' . $retorno['numero_nota']]);
-                     }
-                }
-
-                return redirect()->route('notas.show', $nota->id)
-                    ->with('success', 'Nota emitida com sucesso!');
-            } else {
-                // Tratamento de Erros da API
-                $msg = $retorno['mensagem'];
-                if(isset($retorno['erros']) && is_array($retorno['erros'])) {
-                    $msgs = [];
-                    foreach($retorno['erros'] as $e) {
-                        // Trata se o erro vier como array ou string
-                        $detalhe = is_array($e) ? ($e['Descricao'] ?? json_encode($e)) : $e;
-                        $msgs[] = $detalhe;
-                    }
-                    $msg = implode(' | ', $msgs);
-                }
-
-                $nota->update([
-                    'status' => 'erro',
-                    'mensagem_erro' => $msg
-                ]);
-
-                return back()->withErrors(['erro' => $msg]);
-            }
+            return redirect()->route('notas.show', $nota->id)
+                ->with('success', 'Nota enviada para processamento. Você será notificado assim que for concluída.');
 
         } catch (\Exception $e) {
-            // Erro Fatal (Exception)
+            // Erro Fatal (Exception) ao enfileirar
             $nota->update([
                 'status' => 'erro',
-                'mensagem_erro' => 'Erro interno: ' . $e->getMessage()
+                'mensagem_erro' => 'Erro interno ao enfileirar: ' . $e->getMessage()
             ]);
             return back()->withErrors(['erro' => $e->getMessage()]);
         }
@@ -824,5 +626,22 @@ class NotaFiscalController extends Controller
         } catch (\Exception $e) {
             return back()->withErrors(['erro' => 'Erro ao baixar do governo: ' . $e->getMessage()]);
         }
+    }
+    public function destroy($id)
+    {
+        $nota = NotaFiscal::where('empresa_id', session('empresa_ativa'))->findOrFail($id);
+
+        if (!in_array($nota->status, ['criada', 'rascunho', 'erro'])) {
+            return back()->withErrors(['erro' => 'Apenas rascunhos ou notas com erro podem ser excluídas.']);
+        }
+
+        // Se houver cobrança em rascunho atrelada
+        if ($nota->cobranca && $nota->cobranca->status === 'RASCUNHO') {
+            $nota->cobranca->forceDelete();
+        }
+
+        $nota->delete();
+
+        return redirect()->route('notas.index')->with('success', 'Nota apagada com sucesso!');
     }
 }
