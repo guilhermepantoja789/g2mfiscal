@@ -103,6 +103,21 @@ class NotaFiscalController extends Controller
             $data['tomador_cnpj'] = preg_replace('/\D/', '', $data['tomador_cnpj']);
         }
 
+        // AUTO-CÁLCULO: Se % preenchida mas valor zerado, calcula automaticamente
+        $valorBase = (float)($data['valor_servico'] ?? 0);
+        $paresToTrib = [
+            ['p_tot_trib_fed', 'v_tot_trib_fed'],
+            ['p_tot_trib_est', 'v_tot_trib_est'],
+            ['p_tot_trib_mun', 'v_tot_trib_mun'],
+        ];
+        foreach ($paresToTrib as [$campoPct, $campoVal]) {
+            $pct = (float)($data[$campoPct] ?? 0);
+            $val = (float)($data[$campoVal] ?? 0);
+            if ($pct > 0 && $val == 0 && $valorBase > 0) {
+                $data[$campoVal] = round($valorBase * $pct / 100, 2);
+            }
+        }
+
         // Atualiza o request com os dados limpos para validação
         $request->merge($data);
 
@@ -257,6 +272,21 @@ class NotaFiscalController extends Controller
 
         if(!empty($data['tomador_cnpj'])) {
             $data['tomador_cnpj'] = preg_replace('/\D/', '', $data['tomador_cnpj']);
+        }
+
+        // AUTO-CÁLCULO: Se % preenchida mas valor zerado, calcula automaticamente
+        $valorBase = (float)($data['valor_servico'] ?? 0);
+        $paresToTrib = [
+            ['p_tot_trib_fed', 'v_tot_trib_fed'],
+            ['p_tot_trib_est', 'v_tot_trib_est'],
+            ['p_tot_trib_mun', 'v_tot_trib_mun'],
+        ];
+        foreach ($paresToTrib as [$campoPct, $campoVal]) {
+            $pct = (float)($data[$campoPct] ?? 0);
+            $val = (float)($data[$campoVal] ?? 0);
+            if ($pct > 0 && $val == 0 && $valorBase > 0) {
+                $data[$campoVal] = round($valorBase * $pct / 100, 2);
+            }
         }
 
         // Atualiza request para validação funcionar
@@ -566,61 +596,170 @@ class NotaFiscalController extends Controller
             $qrBase64 = $fallbackImage;
         }
 
+        // Mapa IBGE -> Nome de Cidade (principais do AM)
+        $cidadesIbge = [
+            '1302603' => 'Manaus',
+            '1300029' => 'Anamã',
+            '1300060' => 'Anori',
+            '1300086' => 'Apuí',
+            '1300102' => 'Atalaia do Norte',
+            '1300144' => 'Autazes',
+            '1300201' => 'Barcelos',
+            '1300300' => 'Barreirinha',
+            '1300409' => 'Benjamin Constant',
+            '1300508' => 'Beruri',
+            '1300607' => 'Boa Vista do Ramos',
+            '1300680' => 'Boca do Acre',
+            '1300706' => 'Borba',
+            '1300805' => 'Caapiranga',
+            '1300839' => 'Canutama',
+            '1300904' => 'Carauari',
+            '1301001' => 'Careiro',
+            '1301100' => 'Careiro da Várzea',
+            '1301159' => 'Coari',
+            '1301209' => 'Codajás',
+            '1301308' => 'Eirunepé',
+            '1301407' => 'Envira',
+            '1301506' => 'Fonte Boa',
+            '1301605' => 'Guajará',
+            '1301654' => 'Humaitá',
+            '1301704' => 'Ipixuna',
+            '1301803' => 'Iranduba',
+            '1301852' => 'Itacoatiara',
+            '1301902' => 'Itamarati',
+            '1302009' => 'Itapiranga',
+            '1302108' => 'Japurá',
+            '1302207' => 'Juruá',
+            '1302306' => 'Jutaí',
+            '1302405' => 'Lábrea',
+            '1302504' => 'Manacapuru',
+            '1302553' => 'Manaquiri',
+            '1302702' => 'Manicoré',
+            '1302801' => 'Maraã',
+            '1302900' => 'Maués',
+            '1303007' => 'Nhamundá',
+            '1303106' => 'Nova Olinda do Norte',
+            '1303205' => 'Novo Airão',
+            '1303304' => 'Novo Aripuanã',
+            '1303403' => 'Parintins',
+            '1303502' => 'Pauini',
+            '1303536' => 'Presidente Figueiredo',
+            '1303569' => 'Rio Preto da Eva',
+            '1303601' => 'Santa Isabel do Rio Negro',
+            '1303700' => 'Santo Antônio do Içá',
+            '1303809' => 'São Gabriel da Cachoeira',
+            '1303908' => 'São Paulo de Olivença',
+            '1303957' => 'São Sebastião do Uatumã',
+            '1304005' => 'Silves',
+            '1304062' => 'Tabatinga',
+            '1304104' => 'Tapauá',
+            '1304203' => 'Tefé',
+            '1304237' => 'Tonantins',
+            '1304260' => 'Uarini',
+            '1304302' => 'Urucará',
+            '1304401' => 'Urucurituba',
+        ];
+
+        // Resolver nome da cidade do emitente
+        $cidadeEmitente = $cidadesIbge[$empresa->cod_ibge_mun ?? ''] ?? 'Manaus';
+
+        // Resolver nome da cidade do tomador
+        $cidadeCodigoTomador = $cliente?->cidade_codigo ?? '';
+        $cidadeTomador = $cidadesIbge[$cidadeCodigoTomador] ?? $cidadeCodigoTomador;
+
+        // Regime tributário legível
+        $regimesMap = [
+            1 => 'Não Optante',
+            2 => 'MEI - Microempreendedor Individual',
+            3 => 'Simples Nacional',
+        ];
+        $regimeTrib = $regimesMap[$empresa->regime_tributario ?? 3] ?? 'Simples Nacional';
+
         $emitente = (object) [
             'razao_social' => $empresa->razao_social,
+            'nome_fantasia' => $empresa->nome_fantasia,
             'cnpj' => $empresa->cnpj,
             'inscricao_municipal' => $empresa->inscricao_municipal,
             'endereco' => $empresa->logradouro,
             'numero' => $empresa->numero,
             'complemento' => $empresa->complemento,
             'bairro' => $empresa->bairro,
-            'cidade' => 'Manaus',
+            'cidade' => $cidadeEmitente,
             'uf' => $empresa->uf,
             'cep' => $empresa->cep,
             'telefone' => $empresa->telefone,
             'email' => $empresa->email,
-            'regime_tributario' => 'Simples Nacional'
+            'regime_tributario' => $regimeTrib,
         ];
 
         $tomador = (object) [
             'razao_social'        => $cliente?->razao_social ?? $nota->tomador_nome,
-            'documento'           => $cliente?->documento ?? $nota->tomador_cnpj,
+            'documento'           => $cliente?->cnpj ?? $nota->tomador_cnpj,
             'inscricao_municipal' => $cliente?->inscricao_municipal ?? '',
             'endereco'            => $cliente?->logradouro ?? '',
             'numero'              => $cliente?->numero ?? '',
             'complemento'         => $cliente?->complemento ?? '',
             'bairro'              => $cliente?->bairro ?? '',
-            'cidade'              => $cliente?->cidade_codigo ?? '',
+            'cidade'              => $cidadeTomador,
             'uf'                  => $cliente?->uf ?? '',
             'cep'                 => $cliente?->cep ?? '',
             'email'               => $cliente?->email ?? ($nota->tomador_email ?? ''),
-            'telefone'            => $cliente?->telefone ?? ''
+            'telefone'            => $cliente?->telefone ?? '',
         ];
+
+        // Calcular ISS e valor líquido com dados reais
+        $aliquotaIss = (float)($nota->aliquota_iss > 0 ? $nota->aliquota_iss : $nota->p_tot_trib_mun);
+        $valorServico = (float)$nota->valor_servico;
+        $valorIss = round($valorServico * $aliquotaIss / 100, 2);
+        $issRetido = ($nota->tp_ret_issqn == 2); // 2 = Retido pelo Tomador
+        $valorLiquido = $issRetido ? ($valorServico - $valorIss) : $valorServico;
 
         $dadosNota = (object) [
             'id' => $nota->id,
             'numero' => $nota->numero_nfse,
             'serie' => config('app.env') == 'production' ? '1' : '99',
             'chave' => $chaveAcesso,
-            'data_emissao' => $dataEmissao,
+            'data_emissao' => $nota->emissao ?? $dataEmissao,
             'codigo_verificacao' => $nota->codigo_verificacao,
-            'competencia' => $dataEmissao,
-            'local_prestacao' => 'Manaus/AM',
+            'competencia' => $nota->emissao ?? $dataEmissao,
+            'local_prestacao' => $cidadeEmitente . '/' . ($empresa->uf ?? 'AM'),
             'status' => $nota->status,
+            'ambiente' => $nota->ambiente ?? 'homologacao',
+        ];
+
+        // Situação tributária do ISS
+        $tribIssqnMap = [
+            1 => 'Tributável',
+            2 => 'Imunidade',
+            3 => 'Exportação',
+            4 => 'Não Incidência',
         ];
 
         $dadosServico = (object) [
+            'nome' => $nota->servico?->nome ?? '',
             'discriminacao' => $nota->descricao,
-            'codigo_nbs' => '01.05.01',
-            'codigo_cnae' => '',
+            'codigo_nbs' => $nota->servico?->codigo_nbs ?? ($nota->servico?->codigo_tributacao_nacional ?? ''),
             'item_lista_servico' => $nota->servico?->codigo_tributacao_municipal ?? '',
-            'valor_servico' => (float)$nota->valor_servico,
+            'valor_servico' => $valorServico,
             'valor_deducoes' => 0.00,
-            'iss_retido' => $nota->tp_ret_issqn == 2 ? 1 : 2,
-            'valor_iss' => 0.00,
-            'valor_liquido' => (float)$nota->valor_servico,
-            'aliquota_iss' => 0.00
+            'iss_retido' => $issRetido,
+            'valor_iss' => $valorIss,
+            'valor_liquido' => $valorLiquido,
+            'aliquota_iss' => $aliquotaIss,
+            'trib_issqn' => $tribIssqnMap[$nota->trib_issqn ?? 1] ?? 'Tributável',
+            'tp_ret_issqn' => $nota->tp_ret_issqn ?? 1,
         ];
+
+        // Tributos aproximados (Lei da Transparência)
+        $tributos = (object) [
+            'v_fed' => (float)($nota->v_tot_trib_fed ?? 0),
+            'v_est' => (float)($nota->v_tot_trib_est ?? 0),
+            'v_mun' => (float)($nota->v_tot_trib_mun ?? 0),
+            'p_fed' => (float)($nota->p_tot_trib_fed ?? 0),
+            'p_est' => (float)($nota->p_tot_trib_est ?? 0),
+            'p_mun' => (float)($nota->p_tot_trib_mun ?? 0),
+        ];
+        $tributos->v_total = $tributos->v_fed + $tributos->v_est + $tributos->v_mun;
 
         $outras_informacoes = "Documento emitido por ME ou EPP optante pelo Simples Nacional.";
 
@@ -629,6 +768,7 @@ class NotaFiscalController extends Controller
             'tomador'  => $tomador,
             'nota'     => $dadosNota,
             'servico'  => $dadosServico,
+            'tributos' => $tributos,
             'outras_informacoes' => $outras_informacoes,
             'xml'      => $xmlObject,
             'chaveAcesso' => $chaveAcesso,

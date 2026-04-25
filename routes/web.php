@@ -5,6 +5,7 @@ use App\Http\Controllers\CertificadoController;
 use App\Http\Controllers\CobrancaController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DasPagamentoController;
 use App\Http\Controllers\EmpresaController;
 use App\Http\Controllers\NotaFiscalController;
 use App\Http\Controllers\ClienteController;
@@ -29,6 +30,7 @@ Route::middleware(['auth', 'verified'])->prefix('app')->group(function () {
 
     // --- DASHBOARD ---
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::post('/dashboard/das', [DasPagamentoController::class, 'registrarPagamento'])->name('das.pagar');
 
     // --- NOTAS FISCAIS ---
     Route::get('/notas', [NotaFiscalController::class, 'index'])->name('notas.index');

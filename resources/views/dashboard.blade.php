@@ -158,6 +158,86 @@
                 </div>
             </div>
 
+            </div>
+
+            <!-- INÍCIO: ACOMPANHAMENTO DO DAS -->
+            @if(isset($dasAtual))
+            <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-3 mt-4">Simples Nacional (DAS)</h2>
+            <div class="grid grid-cols-1 gap-8 lg:grid-cols-3 mb-8">
+                <!-- Card Resumo do Mês Atual -->
+                <div class="bg-white overflow-hidden shadow rounded-lg p-6 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-lg leading-6 font-medium text-gray-900 mb-2">DAS - {{ Carbon\Carbon::createFromFormat('Y-m', $dasAtual->competencia)->translatedFormat('F/Y') }}</h3>
+                        <p class="text-sm text-gray-500 mb-4">Estimativa para as notas autorizadas deste mês sem ISS retido.</p>
+                        
+                        <div class="mt-2 text-3xl font-bold {{ $dasAtual->status == 'pago' ? 'text-green-600' : 'text-gray-900' }}">
+                            R$ {{ number_format($dasAtual->valor_pago ?? $dasAtual->valor_estimado, 2, ',', '.') }}
+                        </div>
+                        <div class="mt-1 flex items-center">
+                            @if($dasAtual->status == 'pago')
+                                <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Pago em {{ Carbon\Carbon::parse($dasAtual->data_pagamento)->format('d/m/Y') }}</span>
+                            @else
+                                <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Pendente</span>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lista de Provisão Total e Histórico -->
+                <div class="lg:col-span-2 bg-white overflow-hidden shadow rounded-lg p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg leading-6 font-medium text-gray-900">Histórico de Pagamentos DAS</h3>
+                        <div class="text-right">
+                            <span class="text-sm text-gray-500">Provisão Acumulada:</span>
+                            <span class="ml-2 text-lg font-bold {{ $provisaoDasTotal > 0 ? 'text-red-600' : 'text-green-600' }}">
+                                R$ {{ number_format($provisaoDasTotal, 2, ',', '.') }}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead>
+                                <tr>
+                                    <th class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider pb-2">Competência</th>
+                                    <th class="text-right text-xs font-medium text-gray-500 uppercase tracking-wider pb-2">Estimado</th>
+                                    <th class="text-center text-xs font-medium text-gray-500 uppercase tracking-wider pb-2">Status</th>
+                                    <th class="text-right text-xs font-medium text-gray-500 uppercase tracking-wider pb-2">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                @forelse($historicoDas as $das)
+                                    <tr>
+                                        <td class="py-2 text-sm text-gray-900 font-medium">{{ Carbon\Carbon::createFromFormat('Y-m', $das->competencia)->format('m/Y') }}</td>
+                                        <td class="py-2 text-sm text-right">R$ {{ number_format($das->valor_estimado, 2, ',', '.') }}</td>
+                                        <td class="py-2 text-center">
+                                            @if($das->status == 'pago')
+                                                <span class="text-xs font-bold text-green-600">PAGO</span>
+                                            @else
+                                                <span class="text-xs font-bold text-yellow-500">PENDENTE</span>
+                                            @endif
+                                        </td>
+                                        <td class="py-2 text-right">
+                                            @if($das->status == 'pendente')
+                                                <button type="button" onclick="openDasModal('{{ $das->competencia }}', {{ $das->valor_estimado }})" class="text-blue-600 hover:text-blue-900 text-sm font-medium">Informar Pgto.</button>
+                                            @else
+                                                <span class="text-gray-400 text-sm">R$ {{ number_format($das->valor_pago, 2, ',', '.') }}</span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="4" class="py-2 text-sm text-center text-gray-500">Nenhum registro encontrado.</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            @endif
+            <!-- FIM: ACOMPANHAMENTO DO DAS -->
+
             <div class="grid grid-cols-1 gap-8 lg:grid-cols-3">
                 <div class="lg:col-span-2 bg-white overflow-hidden shadow rounded-lg p-6">
                     <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Evolução de Faturamento ({{ $stats['agrupamento'] }})</h3>
@@ -209,8 +289,66 @@
         </div>
     </div>
 
+    <!-- Modal Informar Pagamento DAS -->
+    <div id="dasModal" class="fixed z-50 inset-0 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onclick="closeDasModal()"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                <form action="{{ route('das.pagar') }}" method="POST">
+                    @csrf
+                    <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <div class="sm:flex sm:items-start">
+                            <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
+                                <svg class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                                <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                                    Registrar Pagamento DAS
+                                </h3>
+                                <div class="mt-4 space-y-4">
+                                    <input type="hidden" name="competencia" id="das_competencia">
+                                    
+                                    <div>
+                                        <label for="valor_pago" class="block text-sm font-medium text-gray-700">Valor Pago (R$)</label>
+                                        <input type="number" step="0.01" name="valor_pago" id="das_valor_pago" class="mt-1 flex-1 block w-full rounded-md sm:text-sm border-gray-300 focus:ring-blue-500 focus:border-blue-500" required>
+                                    </div>
+                                    
+                                    <div>
+                                        <label for="data_pagamento" class="block text-sm font-medium text-gray-700">Data do Pagamento</label>
+                                        <input type="date" name="data_pagamento" id="das_data_pagamento" value="{{ date('Y-m-d') }}" class="mt-1 flex-1 block w-full rounded-md sm:text-sm border-gray-300 focus:ring-blue-500 focus:border-blue-500" required>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                        <button type="submit" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm">
+                            Confirmar Pagamento
+                        </button>
+                        <button type="button" onclick="closeDasModal()" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                            Cancelar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
+        function openDasModal(competencia, valorEstimado) {
+            document.getElementById('das_competencia').value = competencia;
+            document.getElementById('das_valor_pago').value = valorEstimado.toFixed(2);
+            document.getElementById('dasModal').classList.remove('hidden');
+        }
+
+        function closeDasModal() {
+            document.getElementById('dasModal').classList.add('hidden');
+        }
+
         // Função para preencher datas automaticamente
         function setDateRange(type) {
             const today = new Date();

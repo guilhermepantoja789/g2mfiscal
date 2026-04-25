@@ -7,6 +7,7 @@ use App\Models\Empresa;
 use App\Models\NotaFiscal;
 use App\Models\Cliente; // Novo
 use App\Models\Servico; // Novo
+use App\Models\DasPagamento; // Novo
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -141,6 +142,40 @@ class DashboardController extends Controller
         $stats['fin_realizado'] = $financeiroStats->realizado ?? 0;
         $stats['fin_vencido'] = $financeiroStats->vencido ?? 0;
 
-        return view('dashboard', compact('empresa', 'stats', 'topClientes', 'filtroClientes', 'filtroServicos'));
+        // 8. ESTATÍSTICAS DO DAS (Simples Nacional)
+        // Usar data de emissão para o DAS do mês selecionado
+        $competenciaDas = $dataInicio->format('Y-m');
+
+        // Calcula imposto estimado (soma de (valor_servico * aliquota_iss / 100)) para notas não retidas deste mês
+        $valorEstimadoDas = \App\Models\NotaFiscal::where('empresa_id', $empresaId)
+            ->where('status', 'autorizada')
+            ->where('tp_ret_issqn', 1)
+            ->whereBetween('emissao', [$dataInicio->copy()->startOfMonth(), $dataInicio->copy()->endOfMonth()])
+            ->sum(DB::raw('valor_servico * (aliquota_iss / 100)'));
+
+        // Busca ou cria o registro pendente para a competência selecionada
+        $dasAtual = DasPagamento::firstOrCreate(
+            ['empresa_id' => $empresaId, 'competencia' => $competenciaDas],
+            ['valor_estimado' => 0, 'status' => 'pendente']
+        );
+
+        // Atualiza o valor estimado se ainda estiver pendente e o valor mudou
+        if ($dasAtual->status === 'pendente' && abs($dasAtual->valor_estimado - $valorEstimadoDas) > 0.01) {
+            $dasAtual->update(['valor_estimado' => $valorEstimadoDas]);
+        }
+
+        // Calcula a provisão total acumulada (soma de todos os DAS pendentes até o mês selecionado)
+        $provisaoDasTotal = DasPagamento::where('empresa_id', $empresaId)
+            ->where('status', 'pendente')
+            ->where('competencia', '<=', $competenciaDas)
+            ->sum('valor_estimado');
+
+        // Busca histórico de DAS para a listagem (últimos 6 meses, por exemplo)
+        $historicoDas = DasPagamento::where('empresa_id', $empresaId)
+            ->orderBy('competencia', 'desc')
+            ->take(6)
+            ->get();
+
+        return view('dashboard', compact('empresa', 'stats', 'topClientes', 'filtroClientes', 'filtroServicos', 'dasAtual', 'provisaoDasTotal', 'historicoDas'));
     }
 }

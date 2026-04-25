@@ -1,0 +1,70 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches:
+      - production
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout do código
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Instalar dependências do NPM e gerar Build
+      run: |
+        npm install
+        npm run build
+
+    # 1. Compacta o código (ignora as pastas que você definiu)
+    - name: Criar arquivo ZIP
+      run: |
+        zip -r deploy.zip . -x "node_modules/*" -x ".git/*" -x ".env" -x ".DS_Store" -x "bootstrap/cache/*" -x "tests/*" -x "storage/logs/*" -x "phpunit.xml"
+
+    # 2. Envia o ZIP usando sshpass e scp nativo para suportar o HostGator
+    - name: Copiar arquivos via SCP
+      env:
+        SSHPASS: ${{ secrets.SERVER_PASSWORD }}
+      run: |
+        sudo apt-get update && sudo apt-get install -y sshpass
+        sshpass -e scp -o StrictHostKeyChecking=no -o KexAlgorithms=+diffie-hellman-group-exchange-sha256 deploy.zip ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:g2mfiscal_core/
+
+    # 3. Executa os comandos no servidor usando ssh nativo
+    - name: Executar script de Deploy via SSH
+      env:
+        SSHPASS: ${{ secrets.SERVER_PASSWORD }}
+      run: |
+        sshpass -e ssh -o StrictHostKeyChecking=no -o KexAlgorithms=+diffie-hellman-group-exchange-sha256 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          cd g2mfiscal_core/
+          
+          # Remove cache antigo do frontend
+          rm -rf public/build/
+          
+          # Descompacta e limpa o ZIP
+          unzip -o deploy.zip
+          rm deploy.zip
+          
+          # Comandos do Laravel (Artisan)
+          php artisan optimize:clear
+          php artisan config:cache
+          php artisan event:cache
+          php artisan route:cache
+          php artisan view:cache
+          php artisan migrate --force
+          php artisan route:clear
+          
+          php artisan storage:link
+          
+          # Executa seeders
+          php artisan db:seed --class=TributacaoNacionalSeeder --force
+          
+          # Recria o link simbólico do public (usando -snf para repor caso já exista)
+          ln -snf ~/g2mfiscal_core/public/ ~/public_html/fiscal/
+        EOF
