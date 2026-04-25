@@ -144,7 +144,51 @@
                         @endif
                     </div>
                 </div>
-                <div class="ml-4 flex items-center md:ml-6">
+                <div class="ml-4 flex items-center md:ml-6 space-x-3">
+                    
+                    <!-- Notification Bell -->
+                    <div class="relative" x-data="{ openNotif: false }">
+                        <button @click="openNotif = !openNotif" type="button" class="relative rounded-full bg-white p-1 text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                            <span class="sr-only">Ver notificações</span>
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                            </svg>
+                            @if(Auth::user()->unreadNotifications->count() > 0)
+                                <span class="absolute top-0 right-0 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"></span>
+                            @endif
+                        </button>
+                        <div x-show="openNotif" @click.away="openNotif = false" class="absolute right-0 z-10 mt-2 w-80 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none" style="display: none;">
+                            <div class="px-4 py-2 border-b border-gray-100 flex justify-between items-center">
+                                <h3 class="text-sm font-semibold text-gray-900">Notificações</h3>
+                                @if(Auth::user()->unreadNotifications->count() > 0)
+                                    <form method="POST" action="{{ route('notificacoes.ler-todas') }}">
+                                        @csrf
+                                        <button type="submit" class="text-xs text-blue-600 hover:text-blue-800">Marcar lidas</button>
+                                    </form>
+                                @endif
+                            </div>
+                            <div class="max-h-64 overflow-y-auto">
+                                @forelse(Auth::user()->notifications()->take(5)->get() as $notification)
+                                    <div class="px-4 py-3 border-b border-gray-50 {{ $notification->read_at ? 'bg-white' : 'bg-blue-50' }}">
+                                        <p class="text-sm text-gray-800">
+                                            @if(isset($notification->data['mensagem']))
+                                                {{ $notification->data['mensagem'] }}
+                                            @else
+                                                Nova atualização no sistema.
+                                            @endif
+                                        </p>
+                                        <p class="text-xs text-gray-500 mt-1">{{ $notification->created_at->diffForHumans() }}</p>
+                                    </div>
+                                @empty
+                                    <div class="px-4 py-3">
+                                        <p class="text-sm text-gray-500 text-center">Nenhuma notificação no momento.</p>
+                                    </div>
+                                @endforelse
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- User Menu -->
                     <div class="relative ml-3" x-data="{ open: false }">
                         <div>
                             <button @click="open = !open" type="button" class="flex max-w-xs items-center rounded-full bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">

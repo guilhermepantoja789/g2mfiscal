@@ -176,6 +176,13 @@ class DashboardController extends Controller
             ->take(6)
             ->get();
 
-        return view('dashboard', compact('empresa', 'stats', 'topClientes', 'filtroClientes', 'filtroServicos', 'dasAtual', 'provisaoDasTotal', 'historicoDas'));
+        // 9. Últimas Notas Fiscais (Acompanhamento Assíncrono)
+        $ultimasNotas = NotaFiscal::where('empresa_id', $empresaId)
+            ->with('cliente')
+            ->orderBy('created_at', 'desc')
+            ->take(5)
+            ->get();
+
+        return view('dashboard', compact('empresa', 'stats', 'topClientes', 'filtroClientes', 'filtroServicos', 'dasAtual', 'provisaoDasTotal', 'historicoDas', 'ultimasNotas'));
     }
 }

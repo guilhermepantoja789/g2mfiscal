@@ -44,6 +44,12 @@ Route::middleware(['auth', 'verified'])->prefix('app')->group(function () {
     Route::post('/notas/{id}/emitir', [NotaFiscalController::class, 'emitir'])->name('notas.emitir');
     Route::delete('/notas/{id}', [NotaFiscalController::class, 'destroy'])->name('notas.destroy');
 
+    // --- NOTIFICAÇÕES ---
+    Route::post('/notificacoes/ler-todas', function () {
+        auth()->user()->unreadNotifications->markAsRead();
+        return back();
+    })->name('notificacoes.ler-todas');
+
     // --- CADASTROS ---
     Route::resource('clientes', ClienteController::class);
     Route::resource('servicos', ServicoController::class);

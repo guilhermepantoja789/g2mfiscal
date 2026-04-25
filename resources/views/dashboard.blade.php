@@ -286,6 +286,65 @@
                 </div>
             @endif
 
+            <!-- INÍCIO: ACOMPANHAMENTO ASSÍNCRONO DE NOTAS -->
+            @if(isset($ultimasNotas) && $ultimasNotas->count() > 0)
+                <div class="mt-8 bg-white overflow-hidden shadow rounded-lg p-6 border-t-4 border-blue-500">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg leading-6 font-medium text-gray-900">Monitor de Emissão de Notas</h3>
+                        <a href="{{ route('notas.index') }}" class="text-sm font-medium text-blue-600 hover:text-blue-500">Ver Todas &rarr;</a>
+                    </div>
+                    <p class="text-sm text-gray-500 mb-4">Acompanhe o status das últimas notas processadas em segundo plano.</p>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data/Hora</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor (R$)</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                            @foreach($ultimasNotas as $nota)
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        {{ $nota->created_at->format('d/m/Y H:i') }}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                        {{ Str::limit($nota->cliente->razao_social ?? $nota->tomador_nome, 30) }}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-500">
+                                        {{ number_format($nota->valor_servico, 2, ',', '.') }}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-center text-sm">
+                                        @if($nota->status == 'autorizada')
+                                            <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                Autorizada
+                                            </span>
+                                        @elseif($nota->status == 'processando')
+                                            <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 inline-flex items-center">
+                                                <svg class="animate-spin -ml-1 mr-2 h-3 w-3 text-blue-800" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                                Processando...
+                                            </span>
+                                        @elseif($nota->status == 'erro')
+                                            <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800" title="{{ $nota->mensagem_erro }}">
+                                                Falha
+                                            </span>
+                                        @else
+                                            <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                                {{ ucfirst($nota->status) }}
+                                            </span>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            @endif
+            <!-- FIM: ACOMPANHAMENTO ASSÍNCRONO DE NOTAS -->
+
         </div>
     </div>
 
