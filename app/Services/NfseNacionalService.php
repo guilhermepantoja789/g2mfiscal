@@ -203,14 +203,12 @@ class NfseNacionalService
         // 1. Substitui Quebra de Linha por " - "
         $string = str_replace(["\r\n", "\r", "\n"], " - ", $string);
 
-        // 2. Remove acentos (Transliteração segura)
-        $clean = iconv('UTF-8', 'ASCII//TRANSLIT', $string);
-        if ($clean === false) {
-            $clean = preg_replace('/[^\x20-\x7E]/', '', $string);
-        }
+        // 2. Remove caracteres de controle (non-printable) que podem quebrar o XML
+        $string = preg_replace('/[\x00-\x1F\x7F]/', '', $string);
 
-        // 3. Mantém apenas Letras, Números e Pontuação Básica
-        return preg_replace('/[^a-zA-Z0-9\s\-\.\,\/\:\;]/', '', $clean);
+        // 3. Escapa caracteres XML reservados para não quebrar a estrutura da tag
+        // Importante: htmlspecialchars com ENT_XML1 mantém acentuação se for UTF-8
+        return htmlspecialchars($string, ENT_XML1 | ENT_QUOTES, 'UTF-8');
     }
 
     protected function gerarXmlAssinado(array $dados)
@@ -353,9 +351,10 @@ XML;
 
         // 6. Assinatura
         $xmlAssinado = Signer::sign($this->certificate, $xml, 'infDPS', 'Id', OPENSSL_ALGO_SHA256, [false, false, null, null]);
+        $xmlAssinado = trim($xmlAssinado);
 
         if (!str_starts_with($xmlAssinado, '<?xml')) {
-            return '<?xml version="1.0" encoding="UTF-8"?>' . $xmlAssinado;
+            return '<?xml version="1.0" encoding="UTF-8"?>' . "\n" . $xmlAssinado;
         }
 
         return $xmlAssinado;

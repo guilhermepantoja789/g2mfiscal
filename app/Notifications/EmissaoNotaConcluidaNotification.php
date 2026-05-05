@@ -29,7 +29,7 @@ class EmissaoNotaConcluidaNotification extends Notification implements ShouldQue
      */
     public function via(object $notifiable): array
     {
-        return ['database', 'mail'];
+        return ['database'];
     }
 
     /**

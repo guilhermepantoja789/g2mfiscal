@@ -146,8 +146,7 @@ class TesteEmissaoReal extends Command
         if (empty($string)) return '';
         $string = strval($string);
         $string = str_replace(["\r\n", "\r", "\n"], " ", $string);
-        $clean = iconv('UTF-8', 'ASCII//TRANSLIT', $string);
-        if ($clean === false) $clean = preg_replace('/[^\x20-\x7E]/', '', $string);
-        return preg_replace('/[^a-zA-Z0-9\s\-\.\,\/\:\;]/', '', $clean);
+        $string = preg_replace('/[\x00-\x1F\x7F]/', '', $string);
+        return htmlspecialchars($string, ENT_XML1 | ENT_QUOTES, 'UTF-8');
     }
 }
