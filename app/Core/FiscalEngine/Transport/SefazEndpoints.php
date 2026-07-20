@@ -16,6 +16,26 @@ class SefazEndpoints
         return $profile ?: ($this->config['endpoint_profile'] ?? 'homolog_nac');
     }
 
+    /**
+     * Alinha perfil de URL ao tpAmb da empresa.
+     * tpAmb=1 → producao; tpAmb=2 → homolog_nac|homolog (nunca producao).
+     */
+    public function profileForAmbiente(int $tpAmb, ?string $requested = null): string
+    {
+        if ($tpAmb === 1) {
+            return 'producao';
+        }
+
+        $requested = $requested ?: $this->profile();
+        if (in_array($requested, ['homolog_nac', 'homolog'], true)) {
+            return $requested;
+        }
+
+        $fallback = $this->config['endpoint_profile'] ?? 'homolog_nac';
+
+        return in_array($fallback, ['homolog_nac', 'homolog'], true) ? $fallback : 'homolog_nac';
+    }
+
     public function url(string $service, ?string $profile = null): string
     {
         $profile = $this->profile($profile);
@@ -35,6 +55,11 @@ class SefazEndpoints
     public function status(?string $profile = null): string
     {
         return $this->url('status', $profile);
+    }
+
+    public function consulta(?string $profile = null): string
+    {
+        return $this->url('consulta', $profile);
     }
 
     public function qrcode(?string $profile = null): string

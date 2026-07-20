@@ -17,6 +17,7 @@ class NfceEmitirTesteCommand extends Command
         {empresa : ID da empresa}
         {--sync : Emite de forma síncrona (sem fila)}
         {--profile=homolog_nac : Perfil de endpoint (homolog_nac|homolog|producao)}
+        {--force : Confirma uso do perfil producao}
         {--valor=1.00 : Valor unitário do item de teste}';
 
     protected $description = 'Smoke test de emissão NFC-e (homolog-nac primeiro)';
@@ -32,6 +33,12 @@ class NfceEmitirTesteCommand extends Command
 
         $valor = (float) $this->option('valor');
         $profile = (string) $this->option('profile');
+
+        if ($profile === 'producao' && ! $this->option('force')) {
+            $this->error('Perfil producao bloqueado. Use --force para confirmar emissão real.');
+
+            return self::FAILURE;
+        }
 
         [$numero, $serie, $ambiente] = $issuer->reservarNumero($empresa);
 

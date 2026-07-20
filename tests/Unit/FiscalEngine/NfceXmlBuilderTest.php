@@ -88,6 +88,7 @@ class NfceXmlBuilderTest extends TestCase
         $this->assertStringNotContainsString('<dest>', $xml);
         $this->assertStringContainsString('<CSOSN>500</CSOSN>', $xml);
         $this->assertStringContainsString('<CFOP>5405</CFOP>', $xml);
+        $this->assertStringContainsString('NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL', $xml);
         $this->assertStringNotContainsString('<vTroco>', $xml);
     }
 }

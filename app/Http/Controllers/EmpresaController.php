@@ -121,7 +121,6 @@ class EmpresaController extends Controller
             'inscricao_estadual' => 'nullable|string|max:20',
             'crt' => 'nullable|integer|in:1,2,3',
             'nfce_serie' => 'nullable|integer|min:1|max:999',
-            'nfce_ultimo_numero' => 'nullable|integer|min:0',
             'nfce_csc_id' => 'nullable|string|max:10',
             'nfce_csc_token' => 'nullable|string|max:64',
             'nfce_ambiente' => 'nullable|integer|in:1,2',
@@ -158,7 +157,6 @@ class EmpresaController extends Controller
                 : $empresa->inscricao_estadual,
             'crt' => $request->input('crt', $empresa->crt),
             'nfce_serie' => $request->input('nfce_serie', $empresa->nfce_serie ?? 1),
-            'nfce_ultimo_numero' => $request->input('nfce_ultimo_numero', $empresa->nfce_ultimo_numero ?? 0),
             'nfce_csc_id' => $request->input('nfce_csc_id', $empresa->nfce_csc_id),
             'nfce_csc_token' => $request->filled('nfce_csc_token')
                 ? $request->nfce_csc_token

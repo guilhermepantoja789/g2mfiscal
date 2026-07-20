@@ -71,6 +71,22 @@ class NfceXmlBuilder
         $vProd = 0.0;
         foreach ($data->itens as $i => $item) {
             $nItem = $i + 1;
+            // Em homologação (tpAmb=2), o 1º xProd deve conter o texto obrigatório da SEFAZ.
+            if ($data->tpAmb === 2 && $i === 0) {
+                $item = new NfceItem(
+                    descricao: 'NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL',
+                    ncm: $item->ncm,
+                    cfop: $item->cfop,
+                    unidade: $item->unidade,
+                    quantidade: $item->quantidade,
+                    valorUnitario: $item->valorUnitario,
+                    csosn: $item->csosn,
+                    pisCst: $item->pisCst,
+                    cofinsCst: $item->cofinsCst,
+                    cEAN: $item->cEAN,
+                    cProd: $item->cProd,
+                );
+            }
             $this->appendDet($dom, $infNFe, $item, $nItem);
             $vProd += $item->valorTotal();
         }

@@ -91,6 +91,87 @@ class SefazSoapClient
         ];
     }
 
+    /**
+     * Consulta protocolo pela chave (idempotência pós-timeout).
+     *
+     * @return array{
+     *     cStat: string,
+     *     xMotivo: string,
+     *     protocolo: ?string,
+     *     xml_retorno: string,
+     *     nfeProc: ?string,
+     *     autorizado: bool
+     * }
+     */
+    public function consultar(
+        string $chave,
+        string $certPemPath,
+        string $keyPemPath,
+        int $tpAmb,
+        string $signedNFeXml = '',
+        ?string $profile = null,
+    ): array {
+        $chave = preg_replace('/\D/', '', $chave) ?? '';
+        $cons = '<?xml version="1.0" encoding="UTF-8"?>'
+            .'<consSitNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">'
+            .'<tpAmb>'.$tpAmb.'</tpAmb>'
+            .'<xServ>CONSULTAR</xServ>'
+            .'<chNFe>'.$chave.'</chNFe>'
+            .'</consSitNFe>';
+
+        $soap = $this->wrapSoap($cons, 'NFeConsultaProtocolo4');
+        $url = $this->endpoints->consulta($profile);
+        $response = $this->post(
+            $url,
+            $soap,
+            $certPemPath,
+            $keyPemPath,
+            'http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4/nfeConsultaNF',
+        );
+
+        $cStat = '';
+        if (preg_match('/<infProt[\s\S]*?<cStat>(\d+)<\/cStat>/', $response, $m)) {
+            $cStat = $m[1];
+        } else {
+            $cStat = $this->firstTag($response, 'cStat') ?? '';
+        }
+
+        $xMotivo = 'Consulta sem xMotivo';
+        if (preg_match('/<infProt[\s\S]*?<xMotivo>([^<]+)<\/xMotivo>/', $response, $m)) {
+            $xMotivo = html_entity_decode($m[1], ENT_QUOTES | ENT_XML1, 'UTF-8');
+        } else {
+            $xMotivo = $this->firstTag($response, 'xMotivo') ?? $xMotivo;
+        }
+
+        $protocolo = null;
+        if (preg_match('/<nProt>([^<]+)<\/nProt>/', $response, $m)) {
+            $protocolo = $m[1];
+        }
+
+        $autorizado = $cStat === '100';
+        $nfeProc = null;
+        if ($autorizado && $signedNFeXml !== '') {
+            $nfeXml = $this->extractNFe($signedNFeXml);
+            $protNFe = $this->extractTagOuter($response, 'protNFe');
+            if ($protNFe !== null) {
+                $nfeProc = '<?xml version="1.0" encoding="UTF-8"?>'
+                    .'<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">'
+                    .$nfeXml
+                    .$protNFe
+                    .'</nfeProc>';
+            }
+        }
+
+        return [
+            'cStat' => $cStat,
+            'xMotivo' => $xMotivo,
+            'protocolo' => $protocolo,
+            'xml_retorno' => $response,
+            'nfeProc' => $nfeProc,
+            'autorizado' => $autorizado,
+        ];
+    }
+
     private function wrapSoap(string $dadosMsg, string $service): string
     {
         $ns = 'http://www.portalfiscal.inf.br/nfe/wsdl/'.$service;

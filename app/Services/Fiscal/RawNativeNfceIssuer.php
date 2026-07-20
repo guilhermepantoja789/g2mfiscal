@@ -18,6 +18,20 @@ use InvalidArgumentException;
 
 class RawNativeNfceIssuer implements FiscalIssuerInterface
 {
+    /** @var array<string, string> */
+    private const MUNICIPIOS_AM = [
+        '1302603' => 'MANAUS',
+        '1301902' => 'ITACOATIARA',
+        '1302504' => 'MANACAPURU',
+        '1303403' => 'PARINTINS',
+        '1301208' => 'COARI',
+        '1303536' => 'PRESIDENTE FIGUEIREDO',
+        '1304062' => 'TABATINGA',
+        '1301700' => 'HUMAITA',
+        '1301403' => 'EIRUNEPE',
+        '1302900' => 'MAUES',
+    ];
+
     public function __construct(
         private readonly A1Manager $a1Manager = new A1Manager,
         private readonly NfceXmlBuilder $xmlBuilder = new NfceXmlBuilder,
@@ -58,7 +72,13 @@ class RawNativeNfceIssuer implements FiscalIssuerInterface
         $pem = $this->a1Manager->writePemFiles($a1);
 
         try {
+            // Idempotência: se já houve envio (timeout), consulta/reenvia o mesmo XML.
+            if ($nfce && filled($nfce->xml_enviado) && filled($nfce->chave)) {
+                return $this->retransmitOrRecover($empresa, $nfce, $pem, $request->endpointProfile);
+            }
+
             [$numero, $serie, $ambiente] = $this->reservarNumero($empresa, $request->numeroOverride);
+            $profile = $this->endpoints->profileForAmbiente($ambiente, $request->endpointProfile);
 
             $emitData = $this->toEmitData($empresa, $request, $numero, $serie, $ambiente);
             $built = $this->xmlBuilder->build($emitData);
@@ -71,7 +91,6 @@ class RawNativeNfceIssuer implements FiscalIssuerInterface
             );
             $signedXml = $signedDom->saveXML() ?: '';
 
-            $profile = $request->endpointProfile ?? $this->endpoints->profile();
             $qr = $this->qr()->build(
                 chave: $chave,
                 tpAmb: $ambiente,
@@ -146,6 +165,87 @@ class RawNativeNfceIssuer implements FiscalIssuerInterface
         }
     }
 
+    /**
+     * @param  array{cert: string, key: string}  $pem
+     */
+    private function retransmitOrRecover(
+        Empresa $empresa,
+        Nfce $nfce,
+        array $pem,
+        ?string $requestedProfile,
+    ): NfceEmitResult {
+        $ambiente = (int) ($nfce->ambiente ?: $empresa->nfce_ambiente ?: 2);
+        $profile = $this->endpoints->profileForAmbiente($ambiente, $requestedProfile);
+        $signedXml = (string) $nfce->xml_enviado;
+        $chave = (string) $nfce->chave;
+
+        try {
+            $consulta = $this->soap()->consultar(
+                chave: $chave,
+                certPemPath: $pem['cert'],
+                keyPemPath: $pem['key'],
+                tpAmb: $ambiente,
+                signedNFeXml: $signedXml,
+                profile: $profile,
+            );
+
+            if ($consulta['autorizado']) {
+                $nfce->update([
+                    'status' => 'autorizada',
+                    'protocolo' => $consulta['protocolo'],
+                    'c_stat' => $consulta['cStat'],
+                    'x_motivo' => $consulta['xMotivo'],
+                    'xml_autorizado' => $consulta['nfeProc'] ?? $nfce->xml_autorizado,
+                ]);
+
+                return new NfceEmitResult(
+                    sucesso: true,
+                    chave: $chave,
+                    numero: (int) $nfce->numero,
+                    serie: (int) $nfce->serie,
+                    protocolo: $consulta['protocolo'],
+                    cStat: $consulta['cStat'],
+                    xMotivo: $consulta['xMotivo'],
+                    xmlEnviado: $signedXml,
+                    xmlAutorizado: $consulta['nfeProc'],
+                    qrCodeUrl: $nfce->qr_code_url,
+                );
+            }
+        } catch (\Throwable) {
+            // Consulta falhou — reenvia o mesmo XML assinado.
+        }
+
+        $retorno = $this->soap()->autorizar(
+            signedNFeXml: $signedXml,
+            certPemPath: $pem['cert'],
+            keyPemPath: $pem['key'],
+            tpAmb: $ambiente,
+            cUF: (string) config('nfce.cUF', '13'),
+            profile: $profile,
+        );
+
+        $nfce->update([
+            'status' => 'autorizada',
+            'protocolo' => $retorno['protocolo'],
+            'c_stat' => $retorno['cStat'],
+            'x_motivo' => $retorno['xMotivo'],
+            'xml_autorizado' => $retorno['nfeProc'],
+        ]);
+
+        return new NfceEmitResult(
+            sucesso: true,
+            chave: $chave,
+            numero: (int) $nfce->numero,
+            serie: (int) $nfce->serie,
+            protocolo: $retorno['protocolo'],
+            cStat: $retorno['cStat'],
+            xMotivo: $retorno['xMotivo'],
+            xmlEnviado: $signedXml,
+            xmlAutorizado: $retorno['nfeProc'],
+            qrCodeUrl: $nfce->qr_code_url,
+        );
+    }
+
     public function statusServico(Empresa $empresa, ?string $endpointProfile = null): array
     {
         $this->assertEmpresaPronta($empresa, requireCsc: false);
@@ -157,14 +257,16 @@ class RawNativeNfceIssuer implements FiscalIssuerInterface
 
         $a1 = $this->a1Manager->loadFromModel($certificado);
         $pem = $this->a1Manager->writePemFiles($a1);
+        $tpAmb = (int) ($empresa->nfce_ambiente ?: 2);
+        $profile = $this->endpoints->profileForAmbiente($tpAmb, $endpointProfile);
 
         try {
             return $this->soap()->statusServico(
                 certPemPath: $pem['cert'],
                 keyPemPath: $pem['key'],
-                tpAmb: (int) ($empresa->nfce_ambiente ?: 2),
+                tpAmb: $tpAmb,
                 cUF: (string) config('nfce.cUF', '13'),
-                profile: $endpointProfile,
+                profile: $profile,
             );
         } finally {
             $this->a1Manager->cleanup();
@@ -209,7 +311,7 @@ class RawNativeNfceIssuer implements FiscalIssuerInterface
             logradouro: (string) $empresa->logradouro,
             numero: (string) $empresa->numero,
             bairro: (string) $empresa->bairro,
-            municipio: 'MANAUS',
+            municipio: $this->resolveMunicipio((string) $empresa->cod_ibge_mun),
             uf: (string) ($empresa->uf ?: 'AM'),
             cep: (string) $empresa->cep,
             cMun: (string) $empresa->cod_ibge_mun,
@@ -223,6 +325,13 @@ class RawNativeNfceIssuer implements FiscalIssuerInterface
             pagamentos: $request->pagamentos,
             naturezaOperacao: $request->naturezaOperacao,
         );
+    }
+
+    private function resolveMunicipio(string $cMun): string
+    {
+        $cMun = preg_replace('/\D/', '', $cMun) ?? '';
+
+        return self::MUNICIPIOS_AM[$cMun] ?? 'MANAUS';
     }
 
     private function assertEmpresaPronta(Empresa $empresa, bool $requireCsc = true): void

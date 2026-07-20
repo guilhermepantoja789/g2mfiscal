@@ -142,7 +142,8 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Último número usado</label>
-                        <input type="number" name="nfce_ultimo_numero" min="0" value="{{ old('nfce_ultimo_numero', $empresa->nfce_ultimo_numero ?? 0) }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <input type="number" value="{{ $empresa->nfce_ultimo_numero ?? 0 }}" disabled readonly class="mt-1 block w-full rounded-md border-gray-200 bg-gray-50 text-gray-600 shadow-sm cursor-not-allowed">
+                        <p class="mt-1 text-xs text-gray-500">Incrementado automaticamente na emissão — não editável.</p>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">CSC ID (idToken)</label>

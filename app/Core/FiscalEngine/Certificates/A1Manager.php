@@ -98,6 +98,8 @@ class A1Manager
             throw new RuntimeException('Não foi possível gravar arquivo temporário PEM.');
         }
 
+        @chmod($path, 0600);
+
         $this->tempFiles[] = $path;
 
         return $path;
