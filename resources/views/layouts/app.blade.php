@@ -37,6 +37,11 @@
                         Notas Fiscais
                     </a>
 
+                    <a href="{{ route('nfces.index') }}" class="{{ request()->routeIs('nfces.*') ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }} group flex items-center px-2 py-2 text-sm font-medium rounded-md">
+                        <svg class="text-slate-400 group-hover:text-slate-300 mr-3 flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                        NFC-e
+                    </a>
+
                     @php
                         $financeiroAtivo = env('FEATURE_FINANCEIRO', false);
                     @endphp

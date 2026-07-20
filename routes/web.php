@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DasPagamentoController;
 use App\Http\Controllers\EmpresaController;
 use App\Http\Controllers\NotaFiscalController;
+use App\Http\Controllers\NfceController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\EquipeController;
 use App\Http\Controllers\ServicoController;
@@ -43,6 +44,16 @@ Route::middleware(['auth', 'verified'])->prefix('app')->group(function () {
     Route::get('/notas/{id}/danfse-oficial', [NotaFiscalController::class, 'baixarDanfseOficial'])->name('notas.danfse_oficial');
     Route::post('/notas/{id}/emitir', [NotaFiscalController::class, 'emitir'])->name('notas.emitir');
     Route::delete('/notas/{id}', [NotaFiscalController::class, 'destroy'])->name('notas.destroy');
+
+    // --- NFC-e (modelo 65) ---
+    Route::get('/nfces', [NfceController::class, 'index'])->name('nfces.index');
+    Route::get('/nfces/nova', [NfceController::class, 'create'])->name('nfces.create');
+    Route::get('/nfces/laboratorio', [NfceController::class, 'laboratorio'])->name('nfces.laboratorio');
+    Route::post('/nfces/laboratorio/status', [NfceController::class, 'statusServico'])->name('nfces.laboratorio.status');
+    Route::post('/nfces/laboratorio/emitir', [NfceController::class, 'emitirTeste'])->name('nfces.laboratorio.emitir');
+    Route::post('/nfces', [NfceController::class, 'store'])->name('nfces.store');
+    Route::get('/nfces/{id}', [NfceController::class, 'show'])->name('nfces.show');
+    Route::get('/nfces/{id}/imprimir', [NfceController::class, 'imprimir'])->name('nfces.imprimir');
 
     // --- NOTIFICAÇÕES ---
     Route::post('/notificacoes/ler-todas', function () {

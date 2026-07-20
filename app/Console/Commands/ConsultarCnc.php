@@ -5,8 +5,6 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use App\Models\Empresa;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Storage;
-use NFePHP\Common\Certificate;
 
 class ConsultarCnc extends Command
 {
@@ -25,16 +23,10 @@ class ConsultarCnc extends Command
 
         $this->info("1. Preparando certificado...");
         try {
-            $pfxContent = Storage::get($empresa->certificado->nome_arquivo);
-            $password = $empresa->certificado->senha;
-
-            $certs = [];
-            if (!openssl_pkcs12_read($pfxContent, $certs, $password)) {
-                $this->error("Erro ao ler PFX."); return;
-            }
-            $pemContent = $certs['cert'] . "\n" . $certs['pkey'];
+            $result = app(\App\Services\CertificadoA1Service::class)
+                ->loadFromModel($empresa->certificado);
             $tempPemPath = tempnam(sys_get_temp_dir(), 'cert_cnc_') . '.pem';
-            file_put_contents($tempPemPath, $pemContent);
+            file_put_contents($tempPemPath, $result->toPem());
         } catch (\Exception $e) {
             $this->error($e->getMessage()); return;
         }

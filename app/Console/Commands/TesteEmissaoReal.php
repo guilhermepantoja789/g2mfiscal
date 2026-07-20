@@ -5,8 +5,6 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use App\Models\Empresa;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Storage;
-use NFePHP\Common\Certificate;
 use NFePHP\Common\Signer;
 
 class TesteEmissaoReal extends Command
@@ -30,18 +28,11 @@ class TesteEmissaoReal extends Command
         // 1. PREPARAÇÃO DO CERTIFICADO
         // =================================================================
         try {
-            $pfxContent = Storage::get($empresa->certificado->nome_arquivo);
-            $password = $empresa->certificado->senha;
-            $certificate = Certificate::readPfx($pfxContent, $password);
-
-            $certs = [];
-            if (!openssl_pkcs12_read($pfxContent, $certs, $password)) {
-                $this->error("Erro PFX.");
-                return;
-            }
-            $pemContent = $certs['cert'] . "\n" . $certs['pkey'];
+            $result = app(\App\Services\CertificadoA1Service::class)
+                ->loadFromModel($empresa->certificado);
+            $certificate = $result->certificate;
             $tempPemPath = tempnam(sys_get_temp_dir(), 'cert_nacional_') . '.pem';
-            file_put_contents($tempPemPath, $pemContent);
+            file_put_contents($tempPemPath, $result->toPem());
         } catch (\Exception $e) {
             $this->error("Erro Certificado: " . $e->getMessage());
             return;

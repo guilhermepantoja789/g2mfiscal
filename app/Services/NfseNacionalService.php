@@ -2,18 +2,17 @@
 
 namespace App\Services;
 
+use App\Exceptions\CertificadoA1Exception;
 use App\Models\Empresa;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
-use NFePHP\Common\Certificate;
 use NFePHP\Common\Signer;
 
 class NfseNacionalService
 {
     protected $empresa;
     protected $certificate;
-    protected $tempPemPath;
+    protected $tempPemPath = null;
 
     public function __construct(Empresa $empresa)
     {
@@ -24,33 +23,33 @@ class NfseNacionalService
     protected function carregarCertificado()
     {
         try {
-            if (!Storage::exists($this->empresa->certificado->nome_arquivo)) {
-                throw new \Exception("Arquivo do certificado não encontrado.");
+            if (! $this->empresa->certificado) {
+                throw new \Exception('Certificado digital não configurado.');
             }
 
-            $pfxContent = Storage::get($this->empresa->certificado->nome_arquivo);
-            $password = $this->empresa->certificado->senha;
+            $result = app(CertificadoA1Service::class)
+                ->loadFromModel($this->empresa->certificado);
 
-            $this->certificate = Certificate::readPfx($pfxContent, $password);
+            $this->certificate = $result->certificate;
 
-            $certs = [];
-            if (!openssl_pkcs12_read($pfxContent, $certs, $password)) {
-                throw new \Exception("Senha incorreta ou PFX inválido.");
-            }
-
-            $pemContent = $certs['cert'] . "\n" . $certs['pkey'];
-            $this->tempPemPath = tempnam(sys_get_temp_dir(), 'cert_nac_') . '.pem';
-            file_put_contents($this->tempPemPath, $pemContent);
-
+            $this->tempPemPath = tempnam(sys_get_temp_dir(), 'cert_nac_').'.pem';
+            file_put_contents($this->tempPemPath, $result->toPem());
+        } catch (CertificadoA1Exception $e) {
+            Log::error('NfseNacionalService: '.$e->getMessage(), [
+                'openssl' => $e->opensslError,
+            ]);
+            throw new \Exception($e->getMessage(), previous: $e);
         } catch (\Exception $e) {
-            Log::error("NfseNacionalService: " . $e->getMessage());
+            Log::error('NfseNacionalService: '.$e->getMessage());
             throw $e;
         }
     }
 
     public function __destruct()
     {
-        if (file_exists($this->tempPemPath)) @unlink($this->tempPemPath);
+        if ($this->tempPemPath && file_exists($this->tempPemPath)) {
+            @unlink($this->tempPemPath);
+        }
     }
 
     /**

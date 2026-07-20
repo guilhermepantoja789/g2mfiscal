@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\CertificadoA1Exception;
 use App\Models\Empresa;
 use App\Models\Certificado;
 use App\Rules\CpfCnpj;
+use App\Services\CertificadoA1Service;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -116,6 +118,13 @@ class EmpresaController extends Controller
             'cod_ibge_mun' => 'required',
             'inscricao_municipal' => 'required',
             'regime_tributario' => 'required',
+            'inscricao_estadual' => 'nullable|string|max:20',
+            'crt' => 'nullable|integer|in:1,2,3',
+            'nfce_serie' => 'nullable|integer|min:1|max:999',
+            'nfce_ultimo_numero' => 'nullable|integer|min:0',
+            'nfce_csc_id' => 'nullable|string|max:10',
+            'nfce_csc_token' => 'nullable|string|max:64',
+            'nfce_ambiente' => 'nullable|integer|in:1,2',
             // Validação de certificado (opcional, caso use na config)
             'certificado_pfx' => 'nullable|file|mimes:pfx,p12|max:5120',
             'certificado_senha' => 'nullable|required_with:certificado_pfx|string',
@@ -134,7 +143,7 @@ class EmpresaController extends Controller
             'numero' => $request->numero,
             'complemento' => strtoupper($request->complemento),
             'bairro' => strtoupper($request->bairro),
-            // 'uf' => ... (Geralmente vem automático pelo IBGE ou mantém o antigo, adicione se tiver o campo no form)
+            'uf' => strtoupper($request->uf ?? $empresa->uf),
             'cod_ibge_mun' => $request->cod_ibge_mun,
 
             // Fiscal
@@ -142,6 +151,19 @@ class EmpresaController extends Controller
             'regime_tributario' => $request->regime_tributario,
             'regime_apuracao_sn' => ($request->regime_tributario == 3) ? ($request->regime_apuracao_sn ?? 1) : 0,
             'regime_especial_tributacao' => $request->regime_especial_tributacao ?? 0,
+
+            // NFC-e Amazonas
+            'inscricao_estadual' => $request->filled('inscricao_estadual')
+                ? preg_replace('/\D/', '', $request->inscricao_estadual)
+                : $empresa->inscricao_estadual,
+            'crt' => $request->input('crt', $empresa->crt),
+            'nfce_serie' => $request->input('nfce_serie', $empresa->nfce_serie ?? 1),
+            'nfce_ultimo_numero' => $request->input('nfce_ultimo_numero', $empresa->nfce_ultimo_numero ?? 0),
+            'nfce_csc_id' => $request->input('nfce_csc_id', $empresa->nfce_csc_id),
+            'nfce_csc_token' => $request->filled('nfce_csc_token')
+                ? $request->nfce_csc_token
+                : $empresa->nfce_csc_token,
+            'nfce_ambiente' => $request->input('nfce_ambiente', $empresa->nfce_ambiente ?? 2),
         ]);
 
         $mensagem = 'Empresa atualizada com sucesso!';
@@ -240,20 +262,18 @@ class EmpresaController extends Controller
         $password = $request->input('certificado_senha');
         $pfxContent = file_get_contents($file->getRealPath());
 
-        $certs = [];
-        if (!openssl_pkcs12_read($pfxContent, $certs, $password)) {
-            throw new \Exception("Senha incorreta ou arquivo inválido.");
+        if ($pfxContent === false) {
+            throw new \Exception('Não foi possível ler o arquivo do certificado.');
         }
 
-        $x509data = openssl_x509_parse($certs['cert']);
-        $validTo = isset($x509data['validTo_time_t'])
-            ? date('Y-m-d H:i:s', $x509data['validTo_time_t'])
-            : null;
+        try {
+            $result = app(CertificadoA1Service::class)->read($pfxContent, (string) $password);
+        } catch (CertificadoA1Exception $e) {
+            throw new \Exception($e->getMessage(), previous: $e);
+        }
 
-        $filename = 'certificado_' . $empresa->id . '_' . time() . '.pfx';
-        $path = 'certificados/' . $filename;
-
-        Storage::put($path, $pfxContent);
+        $path = 'certificados/'.uniqid('cert_'.$empresa->id.'_', true).'.pfx';
+        Storage::put($path, $result->pfxContent);
 
         Certificado::where('empresa_id', $empresa->id)->update(['ativo' => false]);
 
@@ -262,7 +282,7 @@ class EmpresaController extends Controller
             'nome_arquivo' => $path,
             'nome_original' => $file->getClientOriginalName(),
             'senha' => $password,
-            'valido_ate' => $validTo,
+            'valido_ate' => $result->validoAte->format('Y-m-d H:i:s'),
             'ativo' => true,
         ]);
     }

@@ -2,76 +2,84 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Storage;
+use App\Exceptions\CertificadoA1Exception;
 use App\Models\Empresa;
+use App\Services\CertificadoA1Service;
+use Illuminate\Console\Command;
 
 class TestarCertificado extends Command
 {
-    // O nome que você vai digitar no terminal
     protected $signature = 'teste:certificado {empresa_id}';
-    protected $description = 'Testa se o sistema consegue ler e descriptografar o PFX da empresa';
 
-    public function handle()
+    protected $description = 'Testa se o sistema consegue ler e descriptografar o PFX da empresa (com fallback OpenSSL legacy)';
+
+    public function handle(CertificadoA1Service $certificadoA1): int
     {
         $id = $this->argument('empresa_id');
         $empresa = Empresa::find($id);
 
-        if (!$empresa) {
-            $this->error("Empresa ID $id não encontrada.");
-            return;
+        if (! $empresa) {
+            $this->error("Empresa ID {$id} não encontrada.");
+
+            return self::FAILURE;
         }
 
         $certificado = $empresa->certificado;
 
-        if (!$certificado) {
-            $this->error("Essa empresa não tem certificado cadastrado no banco.");
-            return;
+        if (! $certificado) {
+            $this->error('Essa empresa não tem certificado cadastrado no banco.');
+
+            return self::FAILURE;
         }
 
-        $this->info("1. Buscando arquivo...");
+        $this->line('OpenSSL (PHP): '.$certificadoA1->opensslVersion());
+        $this->line('OpenSSL (CLI): '.($certificadoA1->opensslBinary() ?? 'não encontrado'));
+        $this->line('Arquivo: '.$certificado->nome_arquivo);
+        $this->newLine();
 
-        // Verifica se o arquivo existe no disco
-        // Nota: Ajuste o path conforme onde você salvou no CertificadoController
-        // Se usou $path = $request->file(...)->store('certificados'), ele está em storage/app/certificados
-        if (!Storage::exists($certificado->caminho_arquivo)) {
-            $this->error("Arquivo não encontrado em: " . $certificado->caminho_arquivo);
-            return;
+        $this->info('1. Lendo certificado via CertificadoA1Service...');
+
+        try {
+            $result = $certificadoA1->loadFromModel($certificado);
+        } catch (CertificadoA1Exception $e) {
+            $this->error('FALHA: '.$e->getMessage());
+            if ($e->opensslError) {
+                $this->warn('Detalhe OpenSSL: '.$e->opensslError);
+            }
+
+            return self::FAILURE;
         }
 
-        $pfxContent = Storage::get($certificado->caminho_arquivo);
-        $password = $certificado->senha;
-
-        $this->info("2. Tentando desbloquear o PFX com a senha...");
-
-        $certs = [];
-        // Tenta ler o PFX
-        if (!openssl_pkcs12_read($pfxContent, $certs, $password)) {
-            $this->error("FALHA: Não foi possível ler o certificado. A senha está correta?");
-            $this->error("Erro OpenSSL: " . openssl_error_string());
-            return;
+        $this->info('SUCESSO: Certificado desbloqueado!');
+        if ($result->convertedFromLegacy) {
+            $this->warn('Conversão legada (RC2/3DES → AES) foi necessária e o arquivo em storage foi reescrito.');
         }
 
-        $this->info("SUCESSO: Certificado desbloqueado!");
-
-        // Extrai dados públicos do certificado
-        $dados = openssl_x509_parse($certs['cert']);
-
-        $this->line("------------------------------------------------");
-        $this->info("DADOS DO CERTIFICADO EXTRAÍDOS:");
-        $this->line("Emitido para: " . ($dados['subject']['CN'] ?? 'Desconhecido'));
-        $this->line("Válido de: " . date('d/m/Y H:i:s', $dados['validFrom_time_t']));
-        $this->line("Válido até: " . date('d/m/Y H:i:s', $dados['validTo_time_t']));
-        $this->line("Emissor: " . ($dados['issuer']['CN'] ?? 'Desconhecido'));
-        $this->line("------------------------------------------------");
-
-        // Verifica validade
-        if (time() > $dados['validTo_time_t']) {
-            $this->error("ATENÇÃO: Este certificado está VENCIDO!");
-        } elseif (time() < $dados['validFrom_time_t']) {
-            $this->error("ATENÇÃO: Este certificado ainda não é válido (Data futura).");
-        } else {
-            $this->info("STATUS: VÁLIDO e pronto para uso.");
+        $this->line('------------------------------------------------');
+        $this->info('DADOS DO CERTIFICADO:');
+        $this->line('Emitido para: '.($result->commonName() ?? 'Desconhecido'));
+        $from = $result->x509['validFrom_time_t'] ?? null;
+        if (is_int($from)) {
+            $this->line('Válido de: '.date('d/m/Y H:i:s', $from));
         }
+        $this->line('Válido até: '.$result->validoAte->format('d/m/Y H:i:s'));
+        $this->line('Emissor: '.($result->x509['issuer']['CN'] ?? 'Desconhecido'));
+        $this->line('------------------------------------------------');
+
+        if ($result->isExpired()) {
+            $this->error('ATENÇÃO: Este certificado está VENCIDO!');
+
+            return self::FAILURE;
+        }
+
+        if ($result->isNotYetValid()) {
+            $this->error('ATENÇÃO: Este certificado ainda não é válido (data futura).');
+
+            return self::FAILURE;
+        }
+
+        $this->info('STATUS: VÁLIDO e pronto para uso.');
+
+        return self::SUCCESS;
     }
 }

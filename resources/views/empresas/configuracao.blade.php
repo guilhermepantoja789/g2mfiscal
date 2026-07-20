@@ -119,6 +119,46 @@
                         <label class="block text-sm font-medium text-gray-700">Cód. IBGE</label>
                         <input type="text" name="cod_ibge_mun" value="{{ old('cod_ibge_mun', $empresa->cod_ibge_mun) }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                     </div>
+
+                    <div class="md:col-span-2 border-t pt-4 mt-2">
+                        <h4 class="text-md font-semibold text-gray-900 mb-3">NFC-e Amazonas</h4>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Inscrição Estadual</label>
+                        <input type="text" name="inscricao_estadual" value="{{ old('inscricao_estadual', $empresa->inscricao_estadual) }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">CRT</label>
+                        <select name="crt" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <option value="1" @selected(old('crt', $empresa->crt) == 1)>1 — Simples Nacional</option>
+                            <option value="2" @selected(old('crt', $empresa->crt) == 2)>2 — Simples excesso sublimite</option>
+                            <option value="3" @selected(old('crt', $empresa->crt) == 3)>3 — Regime Normal</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Série NFC-e</label>
+                        <input type="number" name="nfce_serie" min="1" max="999" value="{{ old('nfce_serie', $empresa->nfce_serie ?? 1) }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Último número usado</label>
+                        <input type="number" name="nfce_ultimo_numero" min="0" value="{{ old('nfce_ultimo_numero', $empresa->nfce_ultimo_numero ?? 0) }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">CSC ID (idToken)</label>
+                        <input type="text" name="nfce_csc_id" value="{{ old('nfce_csc_id', $empresa->nfce_csc_id) }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">CSC Token</label>
+                        <input type="password" name="nfce_csc_token" value="" placeholder="{{ $empresa->nfce_csc_token ? '•••••••• (deixe em branco para manter)' : 'Token CSC' }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" autocomplete="new-password">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Ambiente NFC-e</label>
+                        <select name="nfce_ambiente" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <option value="2" @selected(old('nfce_ambiente', $empresa->nfce_ambiente ?? 2) == 2)>2 — Homologação</option>
+                            <option value="1" @selected(old('nfce_ambiente', $empresa->nfce_ambiente ?? 2) == 1)>1 — Produção</option>
+                        </select>
+                    </div>
                 </form>
             </div>
         </div>
@@ -166,11 +206,24 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Arquivo .PFX ou .P12</label>
                         <input type="file" name="arquivo" required accept=".pfx,.p12"
-                               class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                               class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 @error('arquivo') border-red-500 @enderror">
+                        @error('arquivo')
+                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+                        <p class="mt-1 text-xs text-gray-500">
+                            Aceita certificado A1 (.pfx/.p12). Em OpenSSL 3, arquivos com criptografia antiga (RC2/3DES) são convertidos automaticamente.
+                        </p>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Senha do Certificado</label>
-                        <input type="password" name="senha" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <input type="password" name="senha" required
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 @error('senha') border-red-500 @enderror">
+                        @error('senha')
+                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+                        <p class="mt-1 text-xs text-gray-500">
+                            Use a senha definida na exportação do certificado (não a senha da conta gov.br).
+                        </p>
                     </div>
                     <button type="submit" class="w-full bg-gray-800 hover:bg-gray-900 text-white py-2 px-4 rounded shadow text-sm font-medium">
                         Salvar Certificado

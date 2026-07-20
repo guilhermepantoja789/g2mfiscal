@@ -13,9 +13,10 @@ class Certificado extends Model
     protected $fillable = [
         'empresa_id',
         'nome_arquivo',
+        'nome_original',
         'senha',
-        'valido_ate', // <--- Nome correto conforme sua migration
-        'ativo'
+        'valido_ate',
+        'ativo',
     ];
 
     protected $casts = [

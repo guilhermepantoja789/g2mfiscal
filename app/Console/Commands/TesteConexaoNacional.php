@@ -5,7 +5,6 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use App\Models\Empresa;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Storage;
 
 class TesteConexaoNacional extends Command
 {
@@ -24,30 +23,15 @@ class TesteConexaoNacional extends Command
 
         $this->info("1. Preparando certificado...");
 
-        // 1. Verifica se o arquivo existe usando a abstração do Storage (funciona em private/)
-        if (!Storage::exists($empresa->certificado->nome_arquivo)) {
-            $this->error("Arquivo não encontrado no Storage (caminho: {$empresa->certificado->nome_arquivo})");
+        try {
+            $result = app(\App\Services\CertificadoA1Service::class)
+                ->loadFromModel($empresa->certificado);
+            $tempPemPath = tempnam(sys_get_temp_dir(), 'cert_nacional_') . '.pem';
+            file_put_contents($tempPemPath, $result->toPem());
+        } catch (\Exception $e) {
+            $this->error($e->getMessage());
             return;
         }
-
-        // 2. Lê o conteúdo binário do PFX (independente da pasta física)
-        $pfxContent = Storage::get($empresa->certificado->nome_arquivo);
-
-        // 3. Extrai as chaves (Certificado + Private Key)
-        $certs = [];
-        if (!openssl_pkcs12_read($pfxContent, $certs, $empresa->certificado->senha)) {
-            $this->error("Erro ao ler PFX. Senha incorreta ou formato inválido.");
-            return;
-        }
-
-        // 4. Cria o conteúdo PEM combinando a chave e o certificado
-        // O Guzzle prefere receber um único arquivo PEM contendo tudo
-        $pemContent = $certs['cert'] . "\n" . $certs['pkey'];
-
-        // 5. Salva um arquivo temporário na pasta /tmp do sistema
-        // Isso evita problemas de permissão e path do Laravel
-        $tempPemPath = tempnam(sys_get_temp_dir(), 'cert_nacional_') . '.pem';
-        file_put_contents($tempPemPath, $pemContent);
 
         $this->info("   Certificado convertido para PEM temporário: $tempPemPath");
 
