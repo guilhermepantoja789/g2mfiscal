@@ -159,21 +159,7 @@
         <main class="flex-1 bg-surface">
             <div class="py-6">
                 <div class="mx-auto max-w-content px-4 sm:px-6 lg:px-8 page-shell">
-                    @if(app()->environment('production') && request()->routeIs('nfces.*'))
-                        <div class="relative">
-                            <div class="pointer-events-none select-none blur-sm opacity-60" aria-hidden="true">
-                                {{ $slot }}
-                            </div>
-                            <div class="absolute inset-0 z-10 flex items-center justify-center bg-white/50 backdrop-blur-[1px]">
-                                <div class="mx-4 max-w-md rounded-lg border border-slate-200 bg-white px-6 py-5 text-center shadow-lg">
-                                    <p class="text-base font-semibold text-slate-900">Cupom fiscal (NFC-e) em preparação</p>
-                                    <p class="mt-2 text-sm text-slate-600">A emissão de notas de produto ainda não está liberada em produção.</p>
-                                </div>
-                            </div>
-                        </div>
-                    @else
-                        {{ $slot }}
-                    @endif
+                    {{ $slot }}
                 </div>
             </div>
         </main>
