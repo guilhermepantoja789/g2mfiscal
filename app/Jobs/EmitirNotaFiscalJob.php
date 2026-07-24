@@ -2,85 +2,74 @@
 
 namespace App\Jobs;
 
+use App\Models\DocumentoComercial;
 use App\Models\NotaFiscal;
-use App\Services\NfseNacionalService;
-use App\Services\FinanceiroService;
 use App\Notifications\EmissaoNotaConcluidaNotification;
 use App\Notifications\EmissaoNotaFalhaNotification;
+use App\Services\Erp\DocumentoOrchestrator;
+use App\Services\FinanceiroService;
+use App\Services\NfseAmbiente;
+use App\Services\NfseEmitPayloadBuilder;
+use App\Services\NfseNacionalService;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
+use InvalidArgumentException;
 
-class EmitirNotaFiscalJob implements ShouldQueue
+class EmitirNotaFiscalJob implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
-    public $tries = 3;
-    public $backoff = [120, 300]; // Tentar novamente após 2 min, depois 5 min
+    public int $tries = 3;
 
-    public NotaFiscal $nota;
+    /** @var list<int> */
+    public array $backoff = [120, 300];
 
-    /**
-     * Create a new job instance.
-     */
-    public function __construct(NotaFiscal $nota)
+    public int $uniqueFor = 600;
+
+    public function __construct(public NotaFiscal $nota) {}
+
+    public function uniqueId(): string
     {
-        $this->nota = $nota;
+        return 'emitir-nfse-'.$this->nota->id;
     }
 
-    /**
-     * Execute the job.
-     */
-    public function handle(FinanceiroService $financeiroService): void
+    public function handle(FinanceiroService $financeiroService, DocumentoOrchestrator $orchestrator): void
     {
-        $nota = $this->nota;
-        
-        // Se a nota já foi autorizada ou cancelada, não processa
-        if (!in_array($nota->status, ['processando', 'criada', 'erro'])) {
+        $nota = $this->nota->fresh(['empresa.certificado', 'empresa.dono', 'cliente', 'servico', 'cobranca', 'documentoComercial']);
+
+        if (! $nota || ! in_array($nota->status, ['processando', 'criada', 'erro'], true)) {
             return;
         }
 
-        $codMun = $nota->servico->codigo_tributacao_municipal;
-        $codNbs = $nota->servico->codigo_tributacao_nacional;
-        $aliqVal = ($nota->p_tot_trib_mun > 0) ? $nota->p_tot_trib_mun : 2.00;
+        try {
+            $dados = NfseEmitPayloadBuilder::fromNota($nota);
+        } catch (InvalidArgumentException $e) {
+            $nota->update([
+                'status' => 'erro',
+                'mensagem_erro' => $e->getMessage(),
+            ]);
 
-        $dados = [
-            'numero' => $nota->id,
-            'serie' => config('app.env') === 'production' ? '1' : '99',
-            'competencia' => $nota->emissao->format('Y-m-d'),
+            if ($nota->documento_comercial_id) {
+                $doc = DocumentoComercial::find($nota->documento_comercial_id);
+                if ($doc) {
+                    $orchestrator->onFiscalErro($doc, $e->getMessage());
+                }
+            }
 
-            'tomador_doc' => $nota->tomador_cnpj,
-            'tomador_nome' => $nota->tomador_nome,
-            'tomador_email' => $nota->tomador_email,
+            if ($nota->empresa?->dono) {
+                $nota->empresa->dono->notify(new EmissaoNotaFalhaNotification($nota, $e->getMessage()));
+            }
 
-            'tomador_endereco' => $nota->cliente->logradouro ?? 'Endereço não inf.',
-            'tomador_numero' => $nota->cliente->numero ?? 'S/N',
-            'tomador_bairro' => $nota->cliente->bairro ?? 'Centro',
-            'tomador_cep' => $nota->cliente->cep ?? '69000000',
-            'tomador_cidade_codigo' => $nota->cliente->cidade_codigo ?? '1302603',
-            'tomador_uf' => $nota->cliente->uf ?? 'AM',
-            'tomador_complemento' => $nota->cliente->complemento ?? '',
-
-            'valor' => $nota->valor_servico,
-            'discriminacao' => $nota->descricao,
-            'tributacao_iss' => $nota->trib_issqn,
-            'retencao_iss' => $nota->tp_ret_issqn,
-
-            'servico_nbs' => $codNbs,
-            'servico_municipal' => $codMun,
-
-            'aliquota' => $aliqVal,
-
-            'v_tot_trib_fed' => $nota->v_tot_trib_fed,
-            'v_tot_trib_est' => $nota->v_tot_trib_est,
-            'v_tot_trib_mun' => $nota->v_tot_trib_mun,
-        ];
+            return;
+        }
 
         try {
             $service = new NfseNacionalService($nota->empresa);
-            $retorno = $service->emitirNota($dados);
+            $retorno = $service->emitirNota($dados, $nota);
 
-            if (isset($retorno['xml_dps_enviado'])) {
+            if (isset($retorno['xml_dps_enviado']) && blank($nota->xml_enviado)) {
                 $nota->xml_enviado = $retorno['xml_dps_enviado'];
                 $nota->save();
             }
@@ -88,72 +77,94 @@ class EmitirNotaFiscalJob implements ShouldQueue
             if ($retorno['sucesso']) {
                 $nota->update([
                     'status' => 'autorizada',
+                    'ambiente' => NfseAmbiente::label(),
                     'numero_nfse' => $retorno['numero_nota'],
                     'codigo_verificacao' => $retorno['codigo_verificacao'] ?? null,
                     'chave_acesso' => $retorno['chave_acesso'] ?? null,
                     'xml_autorizado' => $retorno['xml_autorizado'],
-                    'mensagem_erro' => null
+                    'mensagem_erro' => null,
                 ]);
 
                 if ($nota->cobranca) {
                     $financeiroService->ativarCobranca($nota->cobranca);
-                    if ($nota->cobranca->descricao != 'Ref. NFS-e Nº ' . $retorno['numero_nota']) {
-                        $nota->cobranca->update(['descricao' => 'Ref. NFS-e Nº ' . $retorno['numero_nota']]);
+                    if ($nota->cobranca->descricao != 'Ref. NFS-e Nº '.$retorno['numero_nota']) {
+                        $nota->cobranca->update(['descricao' => 'Ref. NFS-e Nº '.$retorno['numero_nota']]);
                     }
                 }
 
-                // Disparar Notificação
-                if ($nota->empresa && $nota->empresa->dono) {
+                if ($nota->documento_comercial_id) {
+                    $doc = DocumentoComercial::find($nota->documento_comercial_id);
+                    if ($doc) {
+                        $orchestrator->onFiscalAutorizado($doc);
+                    }
+                }
+
+                if ($nota->empresa?->dono) {
                     $nota->empresa->dono->notify(new EmissaoNotaConcluidaNotification($nota));
                 }
 
-            } else {
-                $msg = $retorno['mensagem'];
-                $isBusinessError = false;
-                
-                if (isset($retorno['erros']) && is_array($retorno['erros'])) {
-                    $msgs = [];
-                    foreach ($retorno['erros'] as $e) {
-                        $detalhe = is_array($e) ? ($e['Descricao'] ?? json_encode($e)) : $e;
-                        $msgs[] = $detalhe;
-                        $isBusinessError = true;
-                    }
-                    $msg = implode(' | ', $msgs);
+                return;
+            }
+
+            $msg = $retorno['mensagem'];
+            $isBusinessError = false;
+
+            if (isset($retorno['erros']) && is_array($retorno['erros'])) {
+                $msgs = [];
+                foreach ($retorno['erros'] as $e) {
+                    $detalhe = is_array($e) ? ($e['Descricao'] ?? json_encode($e)) : $e;
+                    $msgs[] = $detalhe;
+                    $isBusinessError = true;
                 }
+                $msg = implode(' | ', $msgs);
+            }
 
-                if (!$isBusinessError) {
-                    // Falha de comunicação, vamos jogar Exception para forçar o retry do Job
-                    throw new \Exception("Falha na API Nacional: " . $msg);
-                }
+            if (! $isBusinessError) {
+                throw new \Exception('Falha na API Nacional: '.$msg);
+            }
 
-                $nota->update([
-                    'status' => 'erro',
-                    'mensagem_erro' => $msg
-                ]);
+            $nota->update([
+                'status' => 'erro',
+                'mensagem_erro' => $msg,
+            ]);
 
-                // Notificar erro
-                if ($nota->empresa && $nota->empresa->dono) {
-                    $nota->empresa->dono->notify(new EmissaoNotaFalhaNotification($nota, $msg));
+            if ($nota->documento_comercial_id) {
+                $doc = DocumentoComercial::find($nota->documento_comercial_id);
+                if ($doc) {
+                    $orchestrator->onFiscalErro($doc, $msg);
                 }
             }
+
+            if ($nota->empresa?->dono) {
+                $nota->empresa->dono->notify(new EmissaoNotaFalhaNotification($nota, $msg));
+            }
         } catch (\Exception $e) {
-            // Se for timeout ou erro interno, o worker irá retentar se ainda tiver tries
-            throw $e; 
+            Log::warning('EmitirNotaFiscalJob retryable', [
+                'nota_id' => $nota->id,
+                'attempt' => $this->attempts(),
+                'erro' => $e->getMessage(),
+            ]);
+            throw $e;
         }
     }
 
-    /**
-     * Handle a job failure.
-     */
-    public function failed(\Throwable $exception): void
+    public function failed(?\Throwable $exception): void
     {
         $this->nota->update([
             'status' => 'erro',
-            'mensagem_erro' => 'Erro interno ao processar nota: ' . $exception->getMessage()
+            'mensagem_erro' => 'Erro interno ao processar nota: '.($exception?->getMessage() ?? 'desconhecido'),
         ]);
 
-        if ($this->nota->empresa && $this->nota->empresa->dono) {
-            $this->nota->empresa->dono->notify(new EmissaoNotaFalhaNotification($this->nota, $exception->getMessage()));
+        $nota = $this->nota->fresh(['empresa.dono', 'documentoComercial']);
+        if ($nota?->documento_comercial_id && $nota->documentoComercial) {
+            app(DocumentoOrchestrator::class)->onFiscalErro(
+                $nota->documentoComercial,
+                $exception?->getMessage() ?? 'desconhecido'
+            );
+        }
+
+        if ($nota?->empresa?->dono) {
+            $nota->empresa->dono->notify(new EmissaoNotaFalhaNotification($nota, $exception?->getMessage() ?? 'desconhecido'));
         }
     }
 }

@@ -91,4 +91,40 @@ class NfceXmlBuilderTest extends TestCase
         $this->assertStringContainsString('NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL', $xml);
         $this->assertStringNotContainsString('<vTroco>', $xml);
     }
+
+    public function test_contingencia_offline_includes_dhCont_xJust(): void
+    {
+        $builder = new NfceXmlBuilder;
+        $dh = new \DateTimeImmutable('2026-07-20 12:00:00', new \DateTimeZone('America/Manaus'));
+        $data = new NfceEmitData(
+            cnpj: '12345678000195',
+            razaoSocial: 'EMPRESA TESTE LTDA',
+            nomeFantasia: 'EMPRESA TESTE',
+            ie: '123456789',
+            crt: 1,
+            logradouro: 'RUA A',
+            numero: '100',
+            bairro: 'CENTRO',
+            municipio: 'MANAUS',
+            uf: 'AM',
+            cep: '69000000',
+            cMun: '1302603',
+            fone: '',
+            serie: 1,
+            numeroNfce: 12,
+            tpAmb: 2,
+            tpEmis: 9,
+            itens: [new NfceItem('PRODUTO', '22021000', '5102', 'UN', 1, 1.00, '102')],
+            pagamentos: [new NfcePayment('01', 1.00)],
+            cNF: '55667788',
+            dhEmi: $dh,
+            dhCont: $dh,
+            xJust: 'Falha de comunicacao com a SEFAZ',
+        );
+
+        $xml = $builder->build($data)['xml'];
+        $this->assertStringContainsString('<tpEmis>9</tpEmis>', $xml);
+        $this->assertStringContainsString('<dhCont>', $xml);
+        $this->assertStringContainsString('<xJust>Falha de comunicacao com a SEFAZ</xJust>', $xml);
+    }
 }

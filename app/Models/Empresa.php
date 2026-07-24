@@ -20,6 +20,7 @@ class Empresa extends Model
         'crt',
         'nfce_serie',
         'nfce_ultimo_numero',
+        'nfse_dps_ultimo_numero',
         'nfce_csc_id',
         'nfce_csc_token',
         'nfce_ambiente',
@@ -123,5 +124,51 @@ class Empresa extends Model
     public function nfces()
     {
         return $this->hasMany(Nfce::class);
+    }
+
+    public function fornecedores()
+    {
+        return $this->hasMany(Fornecedor::class);
+    }
+
+    public function produtos()
+    {
+        return $this->hasMany(Produto::class);
+    }
+
+    public function documentosComerciais()
+    {
+        return $this->hasMany(DocumentoComercial::class);
+    }
+
+    public function modulos()
+    {
+        return $this->hasMany(EmpresaModulo::class);
+    }
+
+    public function formasPagamento()
+    {
+        return $this->hasMany(FormaPagamento::class);
+    }
+
+    public function temModulo(string $modulo): bool
+    {
+        $row = $this->modulos()->where('modulo', $modulo)->first();
+
+        // Opt-in (ex.: contábil): só ativo com registro explícito
+        if (in_array($modulo, EmpresaModulo::OPT_IN, true)) {
+            return $row !== null && $row->ativo;
+        }
+
+        // Demais: sem registro = habilitado (opt-out)
+        return $row === null || $row->ativo;
+    }
+
+    public function definirModulo(string $modulo, bool $ativo): EmpresaModulo
+    {
+        return $this->modulos()->updateOrCreate(
+            ['modulo' => $modulo],
+            ['ativo' => $ativo],
+        );
     }
 }

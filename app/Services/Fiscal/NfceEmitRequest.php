@@ -19,5 +19,7 @@ readonly class NfceEmitRequest
         public string $naturezaOperacao = 'VENDA',
         public ?int $numeroOverride = null,
         public ?string $endpointProfile = null,
+        public int $tpEmis = 1,
+        public ?string $xJustContingencia = null,
     ) {}
 }

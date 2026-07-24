@@ -134,6 +134,16 @@ class NfceXmlBuilder
         $this->el($dom, $ide, 'indPres', '1');
         $this->el($dom, $ide, 'procEmi', '0');
         $this->el($dom, $ide, 'verProc', 'G2MFiscal1.0');
+
+        if ($data->tpEmis === 9) {
+            $dhCont = $data->dhCont ?? $dhEmi;
+            $xJust = trim((string) ($data->xJust ?: 'Falha de comunicacao com a SEFAZ'));
+            if (mb_strlen($xJust) < 15) {
+                $xJust = 'Falha de comunicacao com a SEFAZ';
+            }
+            $this->el($dom, $ide, 'dhCont', $dhCont->format('Y-m-d\TH:i:sP'));
+            $this->el($dom, $ide, 'xJust', $this->truncate($xJust, 256));
+        }
     }
 
     private function appendEmit(DOMDocument $dom, DOMElement $infNFe, NfceEmitData $data): void

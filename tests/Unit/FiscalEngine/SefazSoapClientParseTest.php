@@ -70,4 +70,38 @@ class SefazSoapClientParseTest extends TestCase
         $e = new SefazTransportException('timeout');
         $this->assertTrue($e->isRetryable());
     }
+
+    public function test_parse_evento_135(): void
+    {
+        $client = new SefazSoapClient(new SefazEndpoints([]));
+        $method = (new ReflectionClass($client))->getMethod('parseEventoResponse');
+        $method->setAccessible(true);
+
+        $response = '<retEnvEvento><retEvento><infEvento>
+            <cStat>135</cStat>
+            <xMotivo>Evento registrado e vinculado a NF-e</xMotivo>
+            <nProt>113250000000099</nProt>
+        </infEvento></retEvento></retEnvEvento>';
+
+        $result = $method->invoke($client, $response);
+        $this->assertSame('135', $result['cStat']);
+        $this->assertSame('113250000000099', $result['protocolo']);
+    }
+
+    public function test_parse_inutilizacao_102(): void
+    {
+        $client = new SefazSoapClient(new SefazEndpoints([]));
+        $method = (new ReflectionClass($client))->getMethod('parseInutilizacaoResponse');
+        $method->setAccessible(true);
+
+        $response = '<retInutNFe><infInut>
+            <cStat>102</cStat>
+            <xMotivo>Inutilizacao de numero homologado</xMotivo>
+            <nProt>113250000000088</nProt>
+        </infInut></retInutNFe>';
+
+        $result = $method->invoke($client, $response);
+        $this->assertSame('102', $result['cStat']);
+        $this->assertSame('113250000000088', $result['protocolo']);
+    }
 }

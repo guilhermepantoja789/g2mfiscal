@@ -33,5 +33,7 @@ readonly class NfceEmitData
         public string $naturezaOperacao = 'VENDA',
         public ?string $cNF = null,
         public ?\DateTimeInterface $dhEmi = null,
+        public ?\DateTimeInterface $dhCont = null,
+        public ?string $xJust = null,
     ) {}
 }

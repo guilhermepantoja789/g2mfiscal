@@ -8,38 +8,48 @@ use DOMElement;
 use DOMXPath;
 
 /**
- * Assinatura XMLDSIG (RSA-SHA1 + C14N) da tag infNFe — PHP nativo.
+ * Assinatura XMLDSIG (RSA-SHA1 + C14N) — PHP nativo.
+ * Assina infNFe, infEvento ou infInut pelo atributo Id.
  */
 class XmlDsigSigner
 {
     public function sign(DOMDocument $dom, string $privateKeyPem, string $x509CertificateBase64): DOMDocument
     {
+        return $this->signByLocalName($dom, 'infNFe', $privateKeyPem, $x509CertificateBase64);
+    }
+
+    public function signByLocalName(
+        DOMDocument $dom,
+        string $localName,
+        string $privateKeyPem,
+        string $x509CertificateBase64,
+    ): DOMDocument {
         $xpath = new DOMXPath($dom);
         $xpath->registerNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
 
-        /** @var DOMElement|null $infNFe */
-        $infNFe = $xpath->query('//*[local-name()="infNFe"]')->item(0);
-        if (! $infNFe instanceof DOMElement) {
-            throw new FiscalEngineException('Nó infNFe não encontrado para assinatura.');
+        /** @var DOMElement|null $target */
+        $target = $xpath->query('//*[local-name()="'.$localName.'"]')->item(0);
+        if (! $target instanceof DOMElement) {
+            throw new FiscalEngineException("Nó {$localName} não encontrado para assinatura.");
         }
 
-        $id = $infNFe->getAttribute('Id');
+        $id = $target->getAttribute('Id');
         if ($id === '') {
-            throw new FiscalEngineException('Atributo Id de infNFe ausente.');
+            throw new FiscalEngineException("Atributo Id de {$localName} ausente.");
         }
 
-        $c14n = $infNFe->C14N(false, false);
+        $c14n = $target->C14N(false, false);
         if ($c14n === false || $c14n === '') {
-            throw new FiscalEngineException('Falha na canonicalização C14N de infNFe.');
+            throw new FiscalEngineException("Falha na canonicalização C14N de {$localName}.");
         }
 
         $digestValue = base64_encode(sha1($c14n, true));
 
-        /** @var DOMElement $nfe */
-        $nfe = $infNFe->parentNode;
+        /** @var DOMElement $parent */
+        $parent = $target->parentNode;
 
         $signature = $dom->createElementNS('http://www.w3.org/2000/09/xmldsig#', 'Signature');
-        $nfe->appendChild($signature);
+        $parent->appendChild($signature);
 
         $signedInfo = $this->appendSignedInfo($dom, $signature, $id, $digestValue);
 
@@ -74,15 +84,31 @@ class XmlDsigSigner
 
     public function digestValueOfInfNFe(DOMDocument $dom): string
     {
+        return $this->digestValueOf($dom, 'infNFe');
+    }
+
+    public function digestValueOf(DOMDocument $dom, string $localName = 'infNFe'): string
+    {
         $xpath = new DOMXPath($dom);
-        $xpath->registerNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
-        $infNFe = $xpath->query('//*[local-name()="infNFe"]')->item(0);
-        if (! $infNFe instanceof DOMElement) {
-            throw new FiscalEngineException('Nó infNFe não encontrado.');
+        $node = $xpath->query('//*[local-name()="'.$localName.'"]')->item(0);
+        if (! $node instanceof DOMElement) {
+            throw new FiscalEngineException("Nó {$localName} não encontrado.");
         }
-        $c14n = $infNFe->C14N(false, false);
+        $c14n = $node->C14N(false, false);
 
         return base64_encode(sha1($c14n, true));
+    }
+
+    /**
+     * Extrai DigestValue já presente na Signature do XML assinado.
+     */
+    public function extractDigestValue(string $signedXml): string
+    {
+        if (preg_match('/<DigestValue>([^<]+)<\/DigestValue>/', $signedXml, $m)) {
+            return $m[1];
+        }
+
+        throw new FiscalEngineException('DigestValue ausente no XML assinado.');
     }
 
     private function appendSignedInfo(

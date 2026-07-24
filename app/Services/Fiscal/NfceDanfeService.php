@@ -3,42 +3,68 @@
 namespace App\Services\Fiscal;
 
 use App\Models\Nfce;
-use Barryvdh\DomPDF\Facade\Pdf;
-use Endroid\QrCode\Builder\Builder;
-use Endroid\QrCode\Writer\PngWriter;
+use Illuminate\Support\Facades\Log;
+use NFePHP\DA\NFe\Danfce;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 class NfceDanfeService
 {
     public function download(Nfce $nfce): Response
     {
-        $nfce->loadMissing('empresa');
-        $qrDataUri = null;
+        try {
+            $pdf = $this->renderPdf($nfce);
+        } catch (Throwable $e) {
+            Log::error('Falha ao gerar DANFE NFC-e via Danfce', [
+                'nfce_id' => $nfce->id,
+                'erro' => $e->getMessage(),
+            ]);
 
-        if ($nfce->qr_code_url) {
-            $qrDataUri = $this->qrDataUri($nfce->qr_code_url);
+            throw new RuntimeException(
+                'Não foi possível gerar o DANFE a partir do XML da NFC-e: '.$e->getMessage(),
+                previous: $e
+            );
         }
 
-        $pdf = Pdf::loadView('pdf.danfe-nfce', [
-            'nfce' => $nfce,
-            'empresa' => $nfce->empresa,
-            'qrDataUri' => $qrDataUri,
-            'itens' => $nfce->payload['itens'] ?? [],
-            'pagamentos' => $nfce->payload['pagamentos'] ?? [],
-        ])->setPaper([0, 0, 226.77, 841.89]); // ~80mm width
+        $filename = 'danfe-nfce-'.$nfce->numero.'.pdf';
 
-        return $pdf->download('danfe-nfce-'.$nfce->numero.'.pdf');
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+        ]);
     }
 
-    public function qrDataUri(string $content): string
+    public function renderPdf(Nfce $nfce): string
     {
-        $builder = new Builder(
-            writer: new PngWriter,
-            data: $content,
-            size: 200,
-            margin: 0,
-        );
+        $xml = $this->resolveXml($nfce);
 
-        return $builder->build()->getDataUri();
+        $danfce = new Danfce($xml);
+        $danfce->setPaperWidth(80);
+
+        if ($nfce->isCancelada()) {
+            $danfce->setAsCanceled();
+        }
+
+        $pdf = $danfce->render();
+
+        if (! is_string($pdf) || ! str_starts_with($pdf, '%PDF')) {
+            throw new RuntimeException('Danfce não retornou um PDF válido.');
+        }
+
+        return $pdf;
+    }
+
+    public function resolveXml(Nfce $nfce): string
+    {
+        $xml = filled($nfce->xml_autorizado)
+            ? (string) $nfce->xml_autorizado
+            : (string) ($nfce->xml_enviado ?? '');
+
+        if ($xml === '') {
+            throw new RuntimeException('NFC-e sem XML autorizado ou enviado para gerar o DANFE.');
+        }
+
+        return $xml;
     }
 }

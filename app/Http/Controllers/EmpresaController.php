@@ -6,6 +6,7 @@ use App\Exceptions\CertificadoA1Exception;
 use App\Models\Empresa;
 use App\Models\Certificado;
 use App\Rules\CpfCnpj;
+use App\Services\Acl\EmpresaAcl;
 use App\Services\CertificadoA1Service;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -15,7 +16,9 @@ use Illuminate\Support\Facades\Session; // Importante: Use Facade
 
 class EmpresaController extends Controller
 {
-    // ... (create e store mantidos iguais, pois não usam sessão) ...
+    public function __construct(
+        private EmpresaAcl $acl,
+    ) {}
 
     public function create()
     {
@@ -76,7 +79,7 @@ class EmpresaController extends Controller
 
     public function configuracao(Empresa $empresa)
     {
-        $this->authorizeAcesso($empresa);
+        $this->authorizeAdminDaEmpresa($empresa);
 
         // Carrega o relacionamento
         $empresa->load('certificado', 'users');
@@ -89,20 +92,25 @@ class EmpresaController extends Controller
 
     public function edit(Empresa $empresa)
     {
-        $this->authorizeAcesso($empresa);
+        $this->authorizeAdminDaEmpresa($empresa);
 
         return view('empresas.edit', compact('empresa'));
     }
 
     public function update(Request $request, Empresa $empresa)
     {
-        $this->authorizeAcesso($empresa);
+        $this->authorizeAdminDaEmpresa($empresa);
 
         // 1. Limpeza de máscaras (CEP e Telefone)
         $input = $request->all();
         $input['cep'] = preg_replace('/\D/', '', $input['cep'] ?? '');
-        // Opcional: limpar telefone se quiser salvar apenas números
-        // $input['telefone'] = preg_replace('/\D/', '', $input['telefone'] ?? '');
+        // Preserva campos omitidos pela tela de Configuração (form parcial).
+        $input['nome_fantasia'] = $input['nome_fantasia'] ?? $empresa->nome_fantasia;
+        $input['email'] = $input['email'] ?? $empresa->email;
+        $input['telefone'] = $input['telefone'] ?? $empresa->telefone;
+        $input['regime_tributario'] = $input['regime_tributario'] ?? $empresa->regime_tributario;
+        $input['regime_apuracao_sn'] = $input['regime_apuracao_sn'] ?? $empresa->regime_apuracao_sn;
+        $input['regime_especial_tributacao'] = $input['regime_especial_tributacao'] ?? $empresa->regime_especial_tributacao;
         $request->replace($input);
 
         // 2. Validação Completa (Igual ao Create)
@@ -124,6 +132,8 @@ class EmpresaController extends Controller
             'nfce_csc_id' => 'nullable|string|max:10',
             'nfce_csc_token' => 'nullable|string|max:64',
             'nfce_ambiente' => 'nullable|integer|in:1,2',
+            'nfce_contingencia' => 'nullable|boolean',
+            'nfce_contingencia_motivo' => 'nullable|string|min:15|max:255',
             // Validação de certificado (opcional, caso use na config)
             'certificado_pfx' => 'nullable|file|mimes:pfx,p12|max:5120',
             'certificado_senha' => 'nullable|required_with:certificado_pfx|string',
@@ -162,7 +172,33 @@ class EmpresaController extends Controller
                 ? $request->nfce_csc_token
                 : $empresa->nfce_csc_token,
             'nfce_ambiente' => $request->input('nfce_ambiente', $empresa->nfce_ambiente ?? 2),
+            'nfce_contingencia' => $request->boolean('nfce_contingencia'),
+            'nfce_contingencia_motivo' => $request->boolean('nfce_contingencia')
+                ? ($request->input('nfce_contingencia_motivo') ?: 'Falha de comunicacao com a SEFAZ')
+                : null,
+            'nfce_contingencia_desde' => $request->boolean('nfce_contingencia')
+                ? ($empresa->nfce_contingencia ? $empresa->nfce_contingencia_desde : now())
+                : null,
         ]);
+
+        if ($request->has('modulo_erp') || $request->has('modulo_pdv') || $request->has('modulo_financeiro_gerencial') || $request->has('modulo_contabil')) {
+            $empresa->definirModulo(
+                \App\Models\EmpresaModulo::MODULO_ERP,
+                $request->boolean('modulo_erp')
+            );
+            $empresa->definirModulo(
+                \App\Models\EmpresaModulo::MODULO_PDV,
+                $request->boolean('modulo_pdv')
+            );
+            $empresa->definirModulo(
+                \App\Models\EmpresaModulo::MODULO_FINANCEIRO_GERENCIAL,
+                $request->boolean('modulo_financeiro_gerencial')
+            );
+            $empresa->definirModulo(
+                \App\Models\EmpresaModulo::MODULO_CONTABIL,
+                $request->boolean('modulo_contabil')
+            );
+        }
 
         $mensagem = 'Empresa atualizada com sucesso!';
 
@@ -183,8 +219,11 @@ class EmpresaController extends Controller
 
     public function selecao()
     {
-        $empresas = Auth::user()->empresas;
-        return view('empresas.selecao', compact('empresas'));
+        $user = Auth::user();
+        $empresas = $this->acl->empresasVisiveis($user);
+        $isPlatformAdmin = $this->acl->isPlatformAdmin($user);
+
+        return view('empresas.selecao', compact('empresas', 'isPlatformAdmin'));
     }
 
     public function entrar(Empresa $empresa)
@@ -194,12 +233,21 @@ class EmpresaController extends Controller
         // CORREÇÃO: Usando Facade e salvando APENAS O ID para evitar erros de objeto
         Session::put('empresa_ativa', $empresa->id);
 
+        $user = Auth::user();
+        if (! $this->acl->isPlatformAdmin($user)) {
+            $perfil = $user->perfilNaEmpresa($empresa->id);
+            if ($perfil === \App\Enums\EmpresaPerfil::Contador
+                && $empresa->temModulo(\App\Models\EmpresaModulo::MODULO_CONTABIL)) {
+                return redirect()->route('contabil.dashboard');
+            }
+        }
+
         return redirect()->route('dashboard');
     }
 
     public function destroy(Empresa $empresa)
     {
-        $this->authorizeAcesso($empresa);
+        $this->authorizeAdminDaEmpresa($empresa);
 
         // CORREÇÃO: Recuperação segura via Facade
         $idSessao = Session::get('empresa_ativa');
@@ -285,10 +333,19 @@ class EmpresaController extends Controller
         ]);
     }
 
-    private function authorizeAcesso($empresa)
+    private function authorizeAcesso(Empresa $empresa): void
     {
-        if (!Auth::user()->empresas->contains($empresa->id)) {
+        if (! $this->acl->podeAcessarEmpresa(Auth::user(), (int) $empresa->id)) {
             abort(403, 'Acesso não autorizado a esta empresa.');
+        }
+    }
+
+    private function authorizeAdminDaEmpresa(Empresa $empresa): void
+    {
+        $this->authorizeAcesso($empresa);
+
+        if (! $this->acl->podeAdministrar(Auth::user(), (int) $empresa->id)) {
+            abort(403, 'Apenas administradores podem gerenciar esta empresa.');
         }
     }
 }

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Exceptions\CertificadoA1Exception;
 use App\Models\Empresa;
+use App\Models\NotaFiscal;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use NFePHP\Common\Signer;
@@ -11,7 +12,9 @@ use NFePHP\Common\Signer;
 class NfseNacionalService
 {
     protected $empresa;
+
     protected $certificate;
+
     protected $tempPemPath = null;
 
     public function __construct(Empresa $empresa)
@@ -34,6 +37,7 @@ class NfseNacionalService
 
             $this->tempPemPath = tempnam(sys_get_temp_dir(), 'cert_nac_').'.pem';
             file_put_contents($this->tempPemPath, $result->toPem());
+            @chmod($this->tempPemPath, 0600);
         } catch (CertificadoA1Exception $e) {
             Log::error('NfseNacionalService: '.$e->getMessage(), [
                 'openssl' => $e->opensslError,
@@ -53,42 +57,43 @@ class NfseNacionalService
     }
 
     /**
-     * Emite a Nota Fiscal (DPS)
+     * Emite a Nota Fiscal (DPS).
+     * Se $nota já tiver xml_enviado, reenvia o mesmo XML (idempotência pós-timeout).
      */
-    public function emitirNota(array $dadosNota)
+    public function emitirNota(array $dadosNota, ?NotaFiscal $nota = null)
     {
         try {
-            $xmlAssinado = $this->gerarXmlAssinado($dadosNota);
-
-            // DEBUG PARA CRON TASK DAS RECORRENCIAS //
-
-//            if (app()->runningInConsole()) {
-//                echo "\n" . str_repeat('=', 40) . "\n";
-//                echo " XML QUE SERÁ ENVIADO (DEBUG): \n";
-//                echo str_repeat('=', 40) . "\n";
-//                echo $xmlAssinado;
-//                echo "\n" . str_repeat('=', 40) . "\n";
-//                die(); // Para o script aqui
-//            } else {
-//                dd($xmlAssinado); // Se for via navegador, mostra na tela
-//            }
+            if ($nota && filled($nota->xml_enviado)) {
+                $xmlAssinado = (string) $nota->xml_enviado;
+            } else {
+                $xmlAssinado = $this->gerarXmlAssinado($dadosNota);
+                if ($nota) {
+                    $nota->update(['xml_enviado' => $xmlAssinado]);
+                }
+            }
 
             $xmlGzip = gzencode(trim($xmlAssinado), 9);
             $xmlBase64 = base64_encode($xmlGzip);
 
-            $url = config('services.nfse_nacional.url_sefin');
+            $url = NfseAmbiente::urlSefin();
 
             $response = Http::withOptions([
                 'cert' => $this->tempPemPath,
                 'verify' => true,
-                'headers' => ['Content-Type' => 'application/json']
+                'timeout' => 90,
+                'headers' => ['Content-Type' => 'application/json'],
             ])->post($url, ['dpsXmlGZipB64' => $xmlBase64]);
 
             return $this->processarRetorno($response, $xmlAssinado);
 
+        } catch (\InvalidArgumentException $e) {
+            Log::error('NfseNacionalService config: '.$e->getMessage());
+
+            return ['sucesso' => false, 'mensagem' => $e->getMessage(), 'erros' => [$e->getMessage()]];
         } catch (\Exception $e) {
-            Log::error("NfseNacionalService Falha: " . $e->getMessage());
-            return ['sucesso' => false, 'mensagem' => 'Erro interno: ' . $e->getMessage()];
+            Log::error('NfseNacionalService Falha: '.$e->getMessage());
+
+            return ['sucesso' => false, 'mensagem' => 'Erro interno: '.$e->getMessage()];
         }
     }
 
@@ -98,22 +103,19 @@ class NfseNacionalService
     public function consultarNota(string $chaveAcesso)
     {
         try {
-            // Ajuste de URL conforme ambiente
-            $ambiente = config('app.env') === 'production' ? 'producao' : 'homologacao';
-            $urlConsulta = $ambiente === 'producao'
-                ? "https://api.nfse.gov.br/nfse/v1/nfse/{$chaveAcesso}"
-                : "https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse/{$chaveAcesso}";
+            $urlConsulta = NfseAmbiente::urlConsulta($chaveAcesso);
 
             $response = Http::withOptions([
                 'cert' => $this->tempPemPath,
                 'verify' => true,
-                'headers' => ['Content-Type' => 'application/json']
+                'timeout' => 60,
+                'headers' => ['Content-Type' => 'application/json'],
             ])->get($urlConsulta);
 
             return $this->processarRetorno($response, null);
 
         } catch (\Exception $e) {
-            return ['sucesso' => false, 'mensagem' => 'Erro na consulta: ' . $e->getMessage()];
+            return ['sucesso' => false, 'mensagem' => 'Erro na consulta: '.$e->getMessage()];
         }
     }
 
@@ -125,37 +127,41 @@ class NfseNacionalService
         if ($response->failed()) {
             $status = $response->status();
             $body = $response->body();
-            Log::error("ERRO API NACIONAL [HTTP $status]: $body");
+            $snippet = mb_substr($body, 0, 500);
+            Log::error("ERRO API NACIONAL [HTTP {$status}]", [
+                'status' => $status,
+                'body_snippet' => $snippet,
+            ]);
+
+            $json = $response->json() ?? [];
+            $jsonMessage = $json['message'] ?? null;
+            $errosApi = $json['erros'] ?? null;
 
             return [
                 'sucesso' => false,
-                'mensagem' => "Erro HTTP $status: " . ($response->json()['message'] ?? $body),
-
-                'detalhes' => $body
+                'mensagem' => "Erro HTTP {$status}: ".($jsonMessage ?? $snippet),
+                'detalhes' => $snippet,
+                // Propaga erros de negócio (E0116 etc.) para o job não tratar como retry/infra.
+                'erros' => is_array($errosApi) && $errosApi !== [] ? $errosApi : null,
+                'xml_dps_enviado' => $xmlEnviado,
             ];
         }
 
         $body = $response->json();
 
-        // CASO DE SUCESSO: XML Retornado (nfseXmlGZipB64)
         if (isset($body['nfseXmlGZipB64'])) {
             try {
-                // 1. Decodifica e Descompacta o XML da Nota
                 $xmlNfse = gzdecode(base64_decode($body['nfseXmlGZipB64']));
 
-                // 2. Extrai os dados vitais (Número e Código Verificação)
-                $dom = new \DOMDocument();
+                $dom = new \DOMDocument;
                 $dom->loadXML($xmlNfse);
 
-                // Tenta pegar o número da nota
                 $nNfseNode = $dom->getElementsByTagName('nNFSe')->item(0);
                 $numeroNota = $nNfseNode ? $nNfseNode->nodeValue : null;
 
-                // Tenta pegar o código de verificação
                 $cVerifNode = $dom->getElementsByTagName('cVerif')->item(0);
                 $codVerif = $cVerifNode ? $cVerifNode->nodeValue : null;
 
-                // Tenta pegar o link do PDF se disponível (geralmente não vem no XML, mas montamos depois)
                 return [
                     'sucesso' => true,
                     'mensagem' => 'Nota emitida com sucesso!',
@@ -168,54 +174,62 @@ class NfseNacionalService
                 ];
 
             } catch (\Exception $e) {
-                Log::error("Erro ao ler XML retornado: " . $e->getMessage());
+                Log::error('Erro ao ler XML retornado: '.$e->getMessage());
+
                 return [
-                    'sucesso' => true, // Foi sucesso na API, só falhou nosso parse
+                    'sucesso' => true,
                     'mensagem' => 'Nota emitida, mas erro ao ler XML de retorno.',
-                    'xml_autorizado' => $body['nfseXmlGZipB64']
+                    'chave_acesso' => $body['chaveAcesso'] ?? null,
+                    'xml_autorizado' => $body['nfseXmlGZipB64'],
+                    'xml_dps_enviado' => $xmlEnviado,
                 ];
             }
         }
 
-        // Caso de Erro de Negócio
         if (isset($body['erros'])) {
-            $listaErros = array_map(fn($e) => "[{$e['codigo']}] {$e['mensagem']}", $body['erros']);
-            Log::warning("Nota Rejeitada: " . implode(" | ", $listaErros));
+            $listaErros = array_map(fn ($e) => "[{$e['codigo']}] {$e['mensagem']}", $body['erros']);
+            Log::warning('Nota Rejeitada: '.implode(' | ', $listaErros));
 
             return [
                 'sucesso' => false,
                 'mensagem' => 'Rejeição Sefin',
                 'erros' => $listaErros,
-                'xml_dps_enviado' => $xmlEnviado
+                'xml_dps_enviado' => $xmlEnviado,
             ];
         }
 
-        Log::warning("Resposta desconhecida: " . json_encode($body));
+        Log::warning('Resposta desconhecida da API NFS-e', [
+            'keys' => is_array($body) ? array_keys($body) : [],
+        ]);
+
         return ['sucesso' => false, 'mensagem' => 'Resposta desconhecida', 'body_bruto' => $body];
     }
 
     protected function sanitize($string)
     {
-        if (empty($string)) return '';
+        if (empty($string)) {
+            return '';
+        }
         $string = strval($string);
 
-        // 1. Substitui Quebra de Linha por " - "
-        $string = str_replace(["\r\n", "\r", "\n"], " - ", $string);
-
-        // 2. Remove caracteres de controle (non-printable) que podem quebrar o XML
+        $string = str_replace(["\r\n", "\r", "\n"], ' - ', $string);
         $string = preg_replace('/[\x00-\x1F\x7F]/', '', $string);
 
-        // 3. Escapa caracteres XML reservados para não quebrar a estrutura da tag
-        // Importante: htmlspecialchars com ENT_XML1 mantém acentuação se for UTF-8
         return htmlspecialchars($string, ENT_XML1 | ENT_QUOTES, 'UTF-8');
     }
 
     protected function gerarXmlAssinado(array $dados)
     {
-        // 1. Dados do Emitente
         $codMun = preg_replace('/\D/', '', $this->empresa->cod_ibge_mun);
         $cnpjEmitente = str_pad(preg_replace('/\D/', '', $this->empresa->cnpj), 14, '0', STR_PAD_LEFT);
-        $imEmitente   = preg_replace('/\D/', '', $this->empresa->inscricao_municipal);
+        // Produção restrita (homolog): CNC Manaus exige IM com 15 dígitos (E0116).
+        // Produção: envia a IM sem zeros à esquerda.
+        $imEmitente = preg_replace('/\D/', '', (string) $this->empresa->inscricao_municipal) ?? '';
+        if (NfseAmbiente::isProducao()) {
+            $imEmitente = ltrim($imEmitente, '0') ?: $imEmitente;
+        } else {
+            $imEmitente = str_pad($imEmitente, 15, '0', STR_PAD_LEFT);
+        }
 
         $opSimpNac = $this->empresa->regime_tributario;
         $tagRegApTribSN = '';
@@ -224,25 +238,26 @@ class NfseNacionalService
             $regApTribSN = $this->empresa->regime_apuracao_sn ?: '1';
             $tagRegApTribSN = "<regApTribSN>{$regApTribSN}</regApTribSN>";
         }
-        $tagRegEspTrib = "<regEspTrib>0</regEspTrib>";
+        $tagRegEspTrib = '<regEspTrib>0</regEspTrib>';
 
-        // 2. Dados do Tomador
         $docTomador = preg_replace('/\D/', '', $dados['tomador_doc']);
         if (strlen($docTomador) > 11) {
             $docTomador = str_pad($docTomador, 14, '0', STR_PAD_LEFT);
             $tagTomador = "<CNPJ>{$docTomador}</CNPJ>";
         } else {
+            $docTomador = str_pad($docTomador, 11, '0', STR_PAD_LEFT);
             $tagTomador = "<CPF>{$docTomador}</CPF>";
         }
 
-        // --- SANITIZAÇÃO (CRUCIAL PARA EVITAR E999) ---
         $nomeTomador = $this->sanitize($dados['tomador_nome']);
-        $endLgr      = $this->sanitize($dados['tomador_endereco']);
-        $endNro      = $this->sanitize($dados['tomador_numero'] ?? 'SN');
-        $endBairro   = $this->sanitize($dados['tomador_bairro'] ?? 'Centro');
-        $endCep      = preg_replace('/\D/', '', $dados['tomador_cep']);
-        $endCmun     = preg_replace('/\D/', '', $dados['tomador_cidade_codigo']);
-        $tagCpl      = !empty($dados['tomador_complemento']) ? "<xCpl>".$this->sanitize($dados['tomador_complemento'])."</xCpl>" : "";
+        $endLgr = $this->sanitize($dados['tomador_endereco']);
+        $endNro = $this->sanitize($dados['tomador_numero'] ?? 'SN');
+        $endBairro = $this->sanitize($dados['tomador_bairro'] ?? 'Centro');
+        $endCep = preg_replace('/\D/', '', $dados['tomador_cep']);
+        $endCmun = preg_replace('/\D/', '', $dados['tomador_cidade_codigo']);
+        $tagCpl = ! empty($dados['tomador_complemento'])
+            ? '<xCpl>'.$this->sanitize($dados['tomador_complemento']).'</xCpl>'
+            : '';
 
         $tagEnderTomador = "<end>
             <endNac>
@@ -255,25 +270,19 @@ class NfseNacionalService
             <xBairro>{$endBairro}</xBairro>
         </end>";
 
-        // 3. Dados de Identificação (Série e Número)
-        // LÓGICA DE SÉRIE: Se for produção, usa a original. Se for teste, força 2.
-        $ambienteProd = config('app.env') === 'production';
-        $serieNum = $ambienteProd ? $dados['serie'] : '99';
+        $tpAmb = (string) NfseAmbiente::tpAmb();
+        $serieNum = $dados['serie'] ?? NfseAmbiente::serie();
 
-        $serieFormatada = str_pad($serieNum, 5, '0', STR_PAD_LEFT);
+        $serieFormatada = str_pad((string) $serieNum, 5, '0', STR_PAD_LEFT);
         $nDPS_ID = str_pad($dados['numero'], 15, '0', STR_PAD_LEFT);
-        $nDPS_XML = (int)$dados['numero'];
+        $nDPS_XML = (int) $dados['numero'];
         $dataEmissao = date('Y-m-d\TH:i:sP');
         $competencia = $dados['competencia'];
-        $tpAmb = $ambienteProd ? '1' : '2';
 
-        // ID da DPS (Com dígito 2 fixo para CNPJ)
         $idDps = "DPS{$codMun}2{$cnpjEmitente}{$serieFormatada}{$nDPS_ID}";
 
-        // 4. Dados do Serviço
-        $descServico = $this->sanitize($dados['discriminacao']); // Remove ENTER
+        $descServico = $this->sanitize($dados['discriminacao']);
 
-        // Garante 6 dígitos no NBS (10301 -> 010301)
         $cTribNacRaw = preg_replace('/\D/', '', $dados['servico_nbs']);
         $cTribNac = str_pad($cTribNacRaw, 6, '0', STR_PAD_LEFT);
 
@@ -281,7 +290,7 @@ class NfseNacionalService
 
         $valServ = number_format($dados['valor'], 2, '.', '');
         $tribISS = $dados['tributacao_iss'];
-        $retISS  = $dados['retencao_iss'];
+        $retISS = $dados['retencao_iss'];
 
         $tagPAliq = '';
         if ($retISS == 2 || $retISS == 3) {
@@ -293,7 +302,6 @@ class NfseNacionalService
         $vEst = number_format($dados['v_tot_trib_est'] ?? 0, 2, '.', '');
         $vMun = number_format($dados['v_tot_trib_mun'] ?? 0, 2, '.', '');
 
-        // 5. Montagem do XML
         $xml = <<<XML
 <DPS xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.00">
     <infDPS Id="{$idDps}">
@@ -348,12 +356,11 @@ class NfseNacionalService
 </DPS>
 XML;
 
-        // 6. Assinatura
         $xmlAssinado = Signer::sign($this->certificate, $xml, 'infDPS', 'Id', OPENSSL_ALGO_SHA256, [false, false, null, null]);
         $xmlAssinado = trim($xmlAssinado);
 
-        if (!str_starts_with($xmlAssinado, '<?xml')) {
-            return '<?xml version="1.0" encoding="UTF-8"?>' . "\n" . $xmlAssinado;
+        if (! str_starts_with($xmlAssinado, '<?xml')) {
+            return '<?xml version="1.0" encoding="UTF-8"?>'."\n".$xmlAssinado;
         }
 
         return $xmlAssinado;
@@ -366,25 +373,21 @@ XML;
     {
         $this->carregarCertificado();
 
-        if (!$this->tempPemPath || !file_exists($this->tempPemPath)) {
-            throw new \Exception("Certificado digital não carregado corretamente.");
+        if (! $this->tempPemPath || ! file_exists($this->tempPemPath)) {
+            throw new \Exception('Certificado digital não carregado corretamente.');
         }
 
         $cnpj = preg_replace('/\D/', '', $this->empresa->cnpj);
         $codMun = preg_replace('/\D/', '', $this->empresa->cod_ibge_mun);
 
-        $baseUrl = config('services.nfse_nacional.url_adn');
-        if (empty($baseUrl)) {
-            throw new \Exception("A URL do ADN (services.nfse_nacional.url_adn) não está configurada.");
-        }
-
-        $url = rtrim($baseUrl, '/') . '/cnc/consulta/cad';
+        $baseUrl = NfseAmbiente::urlAdn();
+        $url = $baseUrl.'/cnc/consulta/cad';
 
         try {
             $response = Http::withOptions([
                 'cert' => $this->tempPemPath,
                 'verify' => true,
-                'timeout' => 30
+                'timeout' => 30,
             ])->get($url, [
                 'codMunicipio' => $codMun,
                 'inscricaoFederal' => $cnpj,
@@ -392,16 +395,16 @@ XML;
 
             if ($response->failed()) {
                 $status = $response->status();
-                $erroBody = $response->body();
-                Log::error("Erro CNC [HTTP $status]: $erroBody");
-                throw new \Exception("Falha na consulta CNC: $status - $erroBody");
+                $erroBody = mb_substr($response->body(), 0, 500);
+                Log::error("Erro CNC [HTTP {$status}]: {$erroBody}");
+                throw new \Exception("Falha na consulta CNC: {$status} - {$erroBody}");
             }
 
             $data = $response->json();
             $imEncontrada = null;
             $situacaoEncontrada = '';
 
-            if (!empty($data['ListaCadastroMunicipal'])) {
+            if (! empty($data['ListaCadastroMunicipal'])) {
                 foreach ($data['ListaCadastroMunicipal'] as $cadastro) {
                     $situacao = $cadastro['InfCad']['SituacaoEmissaoNFSe'] ?? '';
                     if (in_array(strtoupper($situacao), ['HABILITADO', 'ATIVO'])) {
@@ -410,7 +413,7 @@ XML;
                         break;
                     }
                 }
-                if (!$imEncontrada && isset($data['ListaCadastroMunicipal'][0])) {
+                if (! $imEncontrada && isset($data['ListaCadastroMunicipal'][0])) {
                     $imEncontrada = $data['ListaCadastroMunicipal'][0]['InfCad']['InscricaoMunicipal'];
                     $situacaoEncontrada = $data['ListaCadastroMunicipal'][0]['InfCad']['SituacaoEmissaoNFSe'] ?? 'DESCONHECIDO';
                 }
@@ -418,19 +421,23 @@ XML;
 
             if ($imEncontrada) {
                 $imLimpa = preg_replace('/[^0-9]/', '', $imEncontrada);
+
                 return [
                     'im' => $imLimpa,
-                    'situacao' => $situacaoEncontrada
+                    'situacao' => $situacaoEncontrada,
                 ];
             }
 
-            throw new \Exception("Nenhuma Inscrição Municipal retornada na lista do CNC.");
+            throw new \Exception('Nenhuma Inscrição Municipal retornada na lista do CNC.');
 
         } catch (\Exception $e) {
-            Log::error("NfseNacionalService CNC Exception: " . $e->getMessage());
+            Log::error('NfseNacionalService CNC Exception: '.$e->getMessage());
             throw $e;
         } finally {
-            if (file_exists($this->tempPemPath)) @unlink($this->tempPemPath);
+            if ($this->tempPemPath && file_exists($this->tempPemPath)) {
+                @unlink($this->tempPemPath);
+            }
+            $this->tempPemPath = null;
         }
     }
 
@@ -441,32 +448,48 @@ XML;
     {
         $this->carregarCertificado();
 
-        $baseUrl = config('services.nfse_nacional.url_adn');
-        if (empty($baseUrl)) {
-            $baseUrl = "https://adn.producaorestrita.nfse.gov.br";
-        }
+        $baseUrl = NfseAmbiente::urlAdn();
+        $url = $baseUrl.'/danfse/'.$chaveAcesso;
+        $maxAttempts = 3;
+        $lastException = null;
 
-        $url = rtrim($baseUrl, '/') . "/danfse/{$chaveAcesso}";
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            try {
+                $response = Http::withOptions([
+                    'cert' => $this->tempPemPath,
+                    'verify' => true,
+                    'timeout' => 60,
+                ])->get($url);
 
-        try {
-            $response = Http::withOptions([
-                'cert' => $this->tempPemPath,
-                'verify' => true,
-                'timeout' => 60,
-            ])->get($url);
+                if ($response->successful()) {
+                    $body = $response->body();
+                    if (str_starts_with($body, '%PDF')) {
+                        return $body;
+                    }
+                    throw new \Exception('Resposta da ADN não é um PDF válido.');
+                }
 
-            if ($response->failed()) {
                 $status = $response->status();
-                $erroBody = $response->json()['mensagem'] ?? $response->body();
-                Log::error("Erro DANFSe [HTTP $status]: $erroBody");
-                throw new \Exception("Falha ao baixar DANFSe: $status - $erroBody");
+                $erroBody = $response->json()['mensagem'] ?? mb_substr($response->body(), 0, 500);
+                Log::error("Erro DANFSe [HTTP {$status}] tentativa {$attempt}/{$maxAttempts}: {$erroBody}");
+
+                // 502/503/504 costumam ser instabilidade da ADN (comum em produção restrita).
+                if (in_array($status, [502, 503, 504], true) && $attempt < $maxAttempts) {
+                    sleep(2 * $attempt);
+                    continue;
+                }
+
+                throw new \Exception("Falha ao baixar DANFSe: {$status} - {$erroBody}");
+            } catch (\Exception $e) {
+                $lastException = $e;
+                if ($attempt >= $maxAttempts || ! str_contains($e->getMessage(), 'Falha ao baixar DANFSe: 50')) {
+                    Log::error('NfseNacionalService Download PDF: '.$e->getMessage());
+                    throw $e;
+                }
+                sleep(2 * $attempt);
             }
-
-            return $response->body();
-
-        } catch (\Exception $e) {
-            Log::error("NfseNacionalService Download PDF: " . $e->getMessage());
-            throw $e;
         }
+
+        throw $lastException ?? new \Exception('Falha ao baixar DANFSe.');
     }
 }

@@ -38,7 +38,7 @@ class TesteConexaoNacional extends Command
         // --- CONEXÃO ---
 
         // URL de Produção Restrita (Sandbox)
-        $baseUrl = config('services.nfse_nacional.url_adn') . '/contribuintes';
+        $baseUrl = \App\Services\NfseAmbiente::urlAdn().'/contribuintes';
 
         // Manaus: 1302603
         $codigoMunicipio = '1302603';

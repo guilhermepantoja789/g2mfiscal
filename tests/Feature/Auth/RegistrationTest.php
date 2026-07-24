@@ -1,19 +1,12 @@
 <?php
 
+/**
+ * Registro público desabilitado em routes/auth.php (criação via create:user / Artisan).
+ */
 test('registration screen can be rendered', function () {
-    $response = $this->get('/register');
-
-    $response->assertStatus(200);
+    $this->markTestSkipped('Rota /register desabilitada — usuários via Artisan create:user.');
 });
 
 test('new users can register', function () {
-    $response = $this->post('/register', [
-        'name' => 'Test User',
-        'email' => 'test@example.com',
-        'password' => 'password',
-        'password_confirmation' => 'password',
-    ]);
-
-    $this->assertAuthenticated();
-    $response->assertRedirect(route('dashboard', absolute: false));
+    $this->markTestSkipped('Rota /register desabilitada — usuários via Artisan create:user.');
 });

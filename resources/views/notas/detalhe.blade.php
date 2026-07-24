@@ -36,6 +36,9 @@
                         </div>
                         <p class="text-sm font-medium text-gray-500">
                             ID do Sistema: #{{ $nota->id }} &bull; Criada em {{ $nota->created_at->format('d/m/Y \à\s H:i') }}
+                            @if($nota->documento_comercial_id)
+                                &bull; <a href="{{ route('documentos.show', $nota->documento_comercial_id) }}" class="text-indigo-600 hover:underline">Documento #{{ $nota->documento_comercial_id }}</a>
+                            @endif
                         </p>
                     </div>
                 </div>
@@ -88,7 +91,7 @@
         </div>
 
         <!-- MENSAGEM DE ERRO -->
-        @if($nota->status == 'erro' || $errors->any())
+        @if($nota->status == 'erro' || $errors->has('erro') || $errors->has('download'))
             <div class="rounded-2xl bg-rose-50 border border-rose-200 p-6 shadow-sm relative overflow-hidden">
                 <div class="absolute -right-4 -top-4 text-rose-100 opacity-50 transform rotate-12">
                     <svg width="120" height="120" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>
@@ -98,9 +101,11 @@
                         <svg class="h-6 w-6 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
                     </div>
                     <div class="ml-4">
-                        <h3 class="text-sm font-bold text-rose-800 uppercase tracking-wide">Problema na Emissão</h3>
+                        <h3 class="text-sm font-bold text-rose-800 uppercase tracking-wide">
+                            {{ $nota->status === 'erro' || $errors->has('erro') ? 'Problema na Emissão' : 'Download DANFSe' }}
+                        </h3>
                         <div class="mt-2 text-rose-700 font-medium">
-                            {{ $nota->mensagem_erro ?? $errors->first('erro') }}
+                            {{ $nota->mensagem_erro ?? $errors->first('erro') ?? $errors->first('download') }}
                         </div>
                     </div>
                 </div>

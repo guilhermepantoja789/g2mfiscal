@@ -15,9 +15,11 @@ class NotaFiscal extends Model
         'empresa_id',
         'cliente_id',
         'servico_id',
+        'documento_comercial_id',
         'status',
         'ambiente',
         'numero_nfse',
+        'numero_dps',
         'codigo_verificacao',
         'chave_acesso',
         'link_pdf',
@@ -64,6 +66,7 @@ class NotaFiscal extends Model
     public function empresa() { return $this->belongsTo(Empresa::class); }
     public function cliente() { return $this->belongsTo(Cliente::class); }
     public function servico() { return $this->belongsTo(Servico::class); }
+    public function documentoComercial() { return $this->belongsTo(DocumentoComercial::class); }
 
     /* -------------------------------------------------------------------------
      * ACCESSORS (Define o que aparece na View)

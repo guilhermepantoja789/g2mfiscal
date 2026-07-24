@@ -1,11 +1,19 @@
 <x-app-layout>
-    <div class="py-6">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-
-            <div class="mb-6">
-                <h1 class="text-2xl font-semibold text-gray-900">Dashboard Geral</h1>
-                <p class="mt-1 text-sm text-gray-500">Visão completa de emissões fiscais e recebimentos financeiros.</p>
-            </div>
+    <div class="space-y-6">
+        <x-page-header
+            title="Dashboard Geral"
+            subtitle="Visão completa de emissões fiscais e recebimentos financeiros."
+        >
+            <x-slot name="help">
+                <x-help-panel id="dashboard" :open="false">
+                    <ul class="list-disc space-y-1 pl-4 text-sm text-slate-700">
+                        <li>Use o filtro de período para consolidar NFS-e, NFC-e e cobranças.</li>
+                        <li>Atalho <kbd class="rounded border border-slate-200 bg-white px-1 text-xs">⌘K</kbd> abre a busca rápida de telas.</li>
+                        <li>Módulos habilitados da empresa aparecem na barra de ícones à esquerda (ou na barra inferior no celular).</li>
+                    </ul>
+                </x-help-panel>
+            </x-slot>
+        </x-page-header>
 
             <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-8">
                 <form method="GET" action="{{ route('dashboard') }}" id="filterForm">
@@ -345,7 +353,6 @@
             @endif
             <!-- FIM: ACOMPANHAMENTO ASSÍNCRONO DE NOTAS -->
 
-        </div>
     </div>
 
     <!-- Modal Informar Pagamento DAS -->

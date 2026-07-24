@@ -14,6 +14,7 @@ class Cobranca extends Model
         'empresa_id',
         'cliente_id',
         'nota_fiscal_id',
+        'lancamento_financeiro_id',
         'gateway',
         'external_id',
         'valor',
@@ -70,5 +71,10 @@ class Cobranca extends Model
     public function empresa()
     {
         return $this->belongsTo(Empresa::class);
+    }
+
+    public function lancamentoFinanceiro()
+    {
+        return $this->belongsTo(LancamentoFinanceiro::class);
     }
 }

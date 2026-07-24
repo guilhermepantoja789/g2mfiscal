@@ -70,6 +70,21 @@
                         <input type="text" name="razao_social" value="{{ old('razao_social', $empresa->razao_social) }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                     </div>
 
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Nome Fantasia</label>
+                        <input type="text" name="nome_fantasia" value="{{ old('nome_fantasia', $empresa->nome_fantasia) }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">E-mail</label>
+                        <input type="email" name="email" value="{{ old('email', $empresa->email) }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Telefone</label>
+                        <input type="text" name="telefone" value="{{ old('telefone', $empresa->telefone) }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    </div>
+
                     <div class="md:col-span-2">
                         <label class="block text-sm font-medium text-gray-700">Inscrição Municipal</label>
                         <div class="mt-1 flex rounded-md shadow-sm">
@@ -120,6 +135,24 @@
                         <input type="text" name="cod_ibge_mun" value="{{ old('cod_ibge_mun', $empresa->cod_ibge_mun) }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                     </div>
 
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Regime Tributário (NFS-e)</label>
+                        <select name="regime_tributario" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <option value="1" @selected(old('regime_tributario', $empresa->regime_tributario) == 1)>1 — Não optante do Simples</option>
+                            <option value="2" @selected(old('regime_tributario', $empresa->regime_tributario) == 2)>2 — MEI</option>
+                            <option value="3" @selected(old('regime_tributario', $empresa->regime_tributario) == 3)>3 — ME/EPP optante do Simples</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Apuração SN</label>
+                        <select name="regime_apuracao_sn" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <option value="0" @selected(old('regime_apuracao_sn', $empresa->regime_apuracao_sn) == 0)>0 — Não se aplica</option>
+                            <option value="1" @selected(old('regime_apuracao_sn', $empresa->regime_apuracao_sn) == 1)>1 — Pelo Simples Nacional</option>
+                            <option value="2" @selected(old('regime_apuracao_sn', $empresa->regime_apuracao_sn) == 2)>2 — Misto (ISS por fora)</option>
+                        </select>
+                    </div>
+
                     <div class="md:col-span-2 border-t pt-4 mt-2">
                         <h4 class="text-md font-semibold text-gray-900 mb-3">NFC-e Amazonas</h4>
                     </div>
@@ -159,6 +192,73 @@
                             <option value="2" @selected(old('nfce_ambiente', $empresa->nfce_ambiente ?? 2) == 2)>2 — Homologação</option>
                             <option value="1" @selected(old('nfce_ambiente', $empresa->nfce_ambiente ?? 2) == 1)>1 — Produção</option>
                         </select>
+                    </div>
+                    <div class="md:col-span-2 bg-amber-50 border border-amber-200 rounded-md p-4 space-y-3">
+                        <label class="flex items-start gap-2 cursor-pointer">
+                            <input type="hidden" name="nfce_contingencia" value="0">
+                            <input type="checkbox" name="nfce_contingencia" value="1"
+                                   @checked(old('nfce_contingencia', $empresa->nfce_contingencia))
+                                   class="mt-1 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                                   onchange="document.getElementById('nfce_contingencia_motivo_wrap').classList.toggle('hidden', !this.checked)">
+                            <span>
+                                <span class="block text-sm font-semibold text-amber-900">Contingência offline (tpEmis=9)</span>
+                                <span class="block text-xs text-amber-800 mt-0.5">Gera e imprime NFC-e sem SEFAZ; transmite depois. Ative só com SEFAZ indisponível.</span>
+                            </span>
+                        </label>
+                        <div id="nfce_contingencia_motivo_wrap" class="{{ old('nfce_contingencia', $empresa->nfce_contingencia) ? '' : 'hidden' }}">
+                            <label class="block text-sm font-medium text-gray-700">Motivo da contingência (mín. 15 chars)</label>
+                            <input type="text" name="nfce_contingencia_motivo" maxlength="255"
+                                   value="{{ old('nfce_contingencia_motivo', $empresa->nfce_contingencia_motivo ?: 'Falha de comunicacao com a SEFAZ') }}"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 text-sm">
+                            @if($empresa->nfce_contingencia_desde)
+                                <p class="mt-1 text-xs text-amber-700">Ativa desde {{ $empresa->nfce_contingencia_desde->format('d/m/Y H:i') }}</p>
+                            @endif
+                        </div>
+                    </div>
+
+                    <div class="md:col-span-2 border-t pt-4 mt-2 space-y-3">
+                        <h4 class="text-md font-semibold text-gray-900">Módulos da empresa</h4>
+                        <p class="text-sm text-gray-500">ERP/PDV/Financeiro: opt-out (desmarcado = desabilitado). Contábil: opt-in (marcado = habilitado). Fiscal avulso permanece disponível.</p>
+                        <label class="flex items-start gap-3">
+                            <input type="hidden" name="modulo_erp" value="0">
+                            <input type="checkbox" name="modulo_erp" value="1"
+                                   @checked(old('modulo_erp', $empresa->temModulo(\App\Models\EmpresaModulo::MODULO_ERP)))
+                                   class="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            <span>
+                                <span class="block text-sm font-semibold text-gray-900">ERP / Vendas</span>
+                                <span class="block text-xs text-gray-500">Documentos, produtos, estoque e fornecedores.</span>
+                            </span>
+                        </label>
+                        <label class="flex items-start gap-3">
+                            <input type="hidden" name="modulo_pdv" value="0">
+                            <input type="checkbox" name="modulo_pdv" value="1"
+                                   @checked(old('modulo_pdv', $empresa->temModulo(\App\Models\EmpresaModulo::MODULO_PDV)))
+                                   class="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            <span>
+                                <span class="block text-sm font-semibold text-gray-900">PDV</span>
+                                <span class="block text-xs text-gray-500">Tela de venda rápida com NFC-e (requer ERP).</span>
+                            </span>
+                        </label>
+                        <label class="flex items-start gap-3">
+                            <input type="hidden" name="modulo_financeiro_gerencial" value="0">
+                            <input type="checkbox" name="modulo_financeiro_gerencial" value="1"
+                                   @checked(old('modulo_financeiro_gerencial', $empresa->temModulo(\App\Models\EmpresaModulo::MODULO_FINANCEIRO_GERENCIAL)))
+                                   class="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            <span>
+                                <span class="block text-sm font-semibold text-gray-900">Financeiro gerencial</span>
+                                <span class="block text-xs text-gray-500">Lançamentos P/R e formas de pagamento (sem gateway).</span>
+                            </span>
+                        </label>
+                        <label class="flex items-start gap-3">
+                            <input type="hidden" name="modulo_contabil" value="0">
+                            <input type="checkbox" name="modulo_contabil" value="1"
+                                   @checked(old('modulo_contabil', $empresa->temModulo(\App\Models\EmpresaModulo::MODULO_CONTABIL)))
+                                   class="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            <span>
+                                <span class="block text-sm font-semibold text-gray-900">Área Contábil</span>
+                                <span class="block text-xs text-gray-500">Hub fiscal para contador (livros, XMLs, exportações). Opt-in.</span>
+                            </span>
+                        </label>
                     </div>
                 </form>
             </div>
@@ -242,6 +342,11 @@
                         <input type="email" name="email" required
                                placeholder="Digite o e-mail do usuário cadastrado..."
                                class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                        <select name="perfil"
+                                class="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                            <option value="operador">Operador</option>
+                            <option value="contador">Contador</option>
+                        </select>
 
                         <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm flex items-center">
                             <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
@@ -249,12 +354,16 @@
                         </button>
                     </form>
                     <p class="text-xs text-gray-500 mt-2">
-                        * O usuário precisa criar uma conta no sistema antes de ser adicionado aqui.
+                        * Apenas operador ou contador. Admins de empresa são imutáveis (criação da empresa ou Artisan). Contador acessa a Área Contábil em modo leitura fiscal.
                     </p>
                 </div>
 
                 <ul class="space-y-4">
                     @forelse($empresa->users as $user)
+                        @php
+                            $perfilMembro = \App\Enums\EmpresaPerfil::tryFrom((string) $user->pivot->perfil);
+                            $ehAdminMembro = $perfilMembro === \App\Enums\EmpresaPerfil::Admin;
+                        @endphp
                         <li class="flex justify-between items-center text-sm border-b border-gray-100 pb-2 last:border-0">
                             <div class="flex items-center">
                                 <div class="h-10 w-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold mr-3 border border-blue-200">
@@ -267,10 +376,11 @@
                             </div>
 
                             <div class="flex items-center space-x-3">
-
-                                @if(auth()->id() === $user->id)
+                                @if($ehAdminMembro || auth()->id() === $user->id)
                                     <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-bold uppercase">
-                                        {{ $user->pivot->perfil }} (Você)
+                                        {{ $perfilMembro?->label() ?? $user->pivot->perfil }}
+                                        @if($ehAdminMembro) — imutável @endif
+                                        @if(auth()->id() === $user->id) (Você) @endif
                                     </span>
                                 @else
                                     <form action="{{ route('equipe.updateRole', $user->id) }}" method="POST" class="flex items-center">
@@ -279,15 +389,21 @@
                                         <select name="perfil" onchange="this.form.submit()"
                                                 class="text-xs border-gray-300 rounded-l-md focus:ring-blue-500 focus:border-blue-500 py-1 pl-2 pr-6 bg-gray-50">
                                             <option value="operador" {{ $user->pivot->perfil == 'operador' ? 'selected' : '' }}>Operador</option>
-                                            <option value="admin" {{ $user->pivot->perfil == 'admin' ? 'selected' : '' }}>Admin</option>
+                                            <option value="contador" {{ $user->pivot->perfil == 'contador' ? 'selected' : '' }}>Contador</option>
                                         </select>
                                         <div class="bg-gray-200 border border-l-0 border-gray-300 rounded-r-md px-2 py-1">
                                             <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                                         </div>
                                     </form>
-                                @endif
 
-                                @if(auth()->id() !== $user->id)
+                                    <form action="{{ route('equipe.destroy', $user->id) }}" method="POST"
+                                          onsubmit="return confirm('Remover este membro da equipe?')">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="text-xs text-red-600 hover:text-red-800 font-medium">
+                                            Remover
+                                        </button>
+                                    </form>
                                 @endif
                             </div>
                         </li>

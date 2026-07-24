@@ -11,8 +11,8 @@
             
             <div class="relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-center">
                 <div>
-                    <h2 class="text-3xl font-extrabold tracking-tight">Gerenciamento de Notas</h2>
-                    <p class="mt-2 text-blue-100 text-sm sm:text-base max-w-xl">Acompanhe, filtre e emita suas notas fiscais de serviço (NFS-e) de forma rápida e segura. Tudo sincronizado com a prefeitura.</p>
+                    <h2 class="text-3xl font-extrabold tracking-tight">NFS-e (emissão manual)</h2>
+                    <p class="mt-2 text-blue-100 text-sm sm:text-base max-w-xl">Emissão avulsa de notas de serviço — sem estoque/venda. Para o fluxo completo use Vendas → Documentos.</p>
                 </div>
                 <a href="{{ route('notas.create') }}" class="mt-6 sm:mt-0 inline-flex items-center px-6 py-3 bg-white text-blue-700 rounded-xl font-bold text-sm uppercase tracking-wider shadow-md hover:shadow-xl hover:bg-gray-50 transform hover:-translate-y-1 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-blue-700">
                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>

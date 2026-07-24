@@ -104,7 +104,7 @@ class NotaFiscalController extends Controller
                 'cliente_id' => $clienteId,
                 'servico_id' => $request->servico_id,
                 'status'     => 'criada', // Rascunho inicial
-                'ambiente'   => config('app.env') === 'production' ? 'producao' : 'homologacao',
+                'ambiente'   => \App\Services\NfseAmbiente::label(),
 
                 'tomador_cnpj'   => $data['tomador_cnpj'],
                 'tomador_nome'   => $data['tomador_nome'],
@@ -156,7 +156,7 @@ class NotaFiscalController extends Controller
     public function show($id)
     {
         $nota = NotaFiscal::where('empresa_id', session('empresa_ativa'))
-            ->with('cliente')
+            ->with(['cliente', 'documentoComercial'])
             ->findOrFail($id);
 
         return view('notas.detalhe', compact('nota'));
@@ -312,8 +312,29 @@ class NotaFiscalController extends Controller
         }
 
         try {
-            // Atualiza para evitar duplo clique e indica que está na fila
-            $nota->update(['status' => 'processando']);
+            \App\Services\NfseEmitPayloadBuilder::assertClienteCompleto($nota->cliente);
+        } catch (\InvalidArgumentException $e) {
+            return back()->withErrors(['erro' => $e->getMessage()]);
+        }
+
+        try {
+            // Atualiza para evitar duplo clique e indica que está na fila.
+            // Em reemissão após erro, descarta DPS anterior e reserva novo nDPS
+            // (a SEFIN rejeita reenvio do mesmo série+número após aceite).
+            $payload = [
+                'status' => 'processando',
+                'ambiente' => \App\Services\NfseAmbiente::label(),
+                'mensagem_erro' => null,
+            ];
+
+            if ($nota->status === 'erro') {
+                $payload['xml_enviado'] = null;
+                $payload['numero_dps'] = \App\Services\NfseDpsNumero::reservar($nota->empresa);
+            } elseif (blank($nota->numero_dps)) {
+                $payload['numero_dps'] = \App\Services\NfseDpsNumero::reservar($nota->empresa);
+            }
+
+            $nota->update($payload);
 
             \App\Jobs\EmitirNotaFiscalJob::dispatch($nota);
 
@@ -519,7 +540,7 @@ class NotaFiscalController extends Controller
         $dadosNota = (object) [
             'id' => $nota->id,
             'numero' => $nota->numero_nfse,
-            'serie' => config('app.env') == 'production' ? '1' : '99',
+            'serie' => \App\Services\NfseAmbiente::serie(),
             'chave' => $chaveAcesso,
             'data_emissao' => $nota->emissao ?? $dataEmissao,
             'codigo_verificacao' => $nota->codigo_verificacao,
@@ -624,7 +645,22 @@ class NotaFiscalController extends Controller
                 ->header('Content-Disposition', 'inline; filename="DANFSe_Oficial_' . $nota->numero_nfse . '.pdf"');
 
         } catch (\Exception $e) {
-            return back()->withErrors(['erro' => 'Erro ao baixar do governo: ' . $e->getMessage()]);
+            // ADN (principalmente produção restrita) costuma responder 502/503.
+            // Nesse caso entrega o espelho local em vez de bloquear o usuário.
+            if (preg_match('/Falha ao baixar DANFSe:\s*50[234]/', $e->getMessage())) {
+                \Illuminate\Support\Facades\Log::warning('DANFSe oficial indisponível na ADN; usando espelho local', [
+                    'nota_id' => $nota->id,
+                    'chave' => $chaveAcesso,
+                    'erro' => $e->getMessage(),
+                ]);
+
+                return $this->imprimir($id);
+            }
+
+            return back()->withErrors([
+                'download' => 'Erro ao baixar do governo: '.$e->getMessage()
+                    .' Use o Espelho Interno enquanto a ADN estiver indisponível.',
+            ]);
         }
     }
     public function destroy($id)

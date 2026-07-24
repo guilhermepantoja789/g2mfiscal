@@ -7,7 +7,9 @@ use App\Core\FiscalEngine\Dto\NfceItem;
 use App\Core\FiscalEngine\Dto\NfcePayment;
 use App\Core\FiscalEngine\Exceptions\SefazRejectionException;
 use App\Core\FiscalEngine\Exceptions\SefazTransportException;
+use App\Models\DocumentoComercial;
 use App\Models\Nfce;
+use App\Services\Erp\DocumentoOrchestrator;
 use App\Services\Fiscal\NfceEmitRequest;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -25,9 +27,9 @@ class EmitirNfceJob implements ShouldQueue
 
     public function __construct(public Nfce $nfce) {}
 
-    public function handle(FiscalIssuerInterface $issuer): void
+    public function handle(FiscalIssuerInterface $issuer, DocumentoOrchestrator $orchestrator): void
     {
-        $nfce = $this->nfce->fresh(['empresa.certificado']);
+        $nfce = $this->nfce->fresh(['empresa.certificado', 'documentoComercial']);
         if (! $nfce || ! in_array($nfce->status, ['processando', 'criada', 'erro'], true)) {
             return;
         }
@@ -67,6 +69,9 @@ class EmitirNfceJob implements ShouldQueue
             naturezaOperacao: $payload['natureza'] ?? 'VENDA',
             numeroOverride: $nfce->numero > 0 ? $nfce->numero : null,
             endpointProfile: $payload['endpoint_profile'] ?? null,
+            tpEmis: (int) ($nfce->tp_emis ?: 1),
+            xJustContingencia: $payload['x_just_contingencia']
+                ?? $nfce->empresa?->nfce_contingencia_motivo,
         );
 
         $nfce->update(['status' => 'processando']);
@@ -74,17 +79,39 @@ class EmitirNfceJob implements ShouldQueue
         try {
             $issuer->emit($nfce->empresa, $request, $nfce);
 
+            $nfce = $nfce->fresh();
             Log::info('NFC-e autorizada', [
                 'nfce_id' => $nfce->id,
-                'chave' => $nfce->fresh()->chave,
-                'cStat' => $nfce->fresh()->c_stat,
+                'chave' => $nfce->chave,
+                'cStat' => $nfce->c_stat,
+                'status' => $nfce->status,
             ]);
+
+            if ($nfce->status === 'pendente_transmissao') {
+                TransmitirNfceContingenciaJob::dispatch($nfce);
+
+                return;
+            }
+
+            if ($nfce->documento_comercial_id && $nfce->status === 'autorizada') {
+                $doc = DocumentoComercial::find($nfce->documento_comercial_id);
+                if ($doc) {
+                    $orchestrator->onFiscalAutorizado($doc);
+                }
+            }
         } catch (SefazRejectionException $e) {
             $nfce->update([
                 'status' => 'rejeitado',
                 'c_stat' => $e->cStat,
                 'x_motivo' => $e->xMotivo,
             ]);
+
+            if ($nfce->documento_comercial_id) {
+                $doc = DocumentoComercial::find($nfce->documento_comercial_id);
+                if ($doc) {
+                    $orchestrator->onFiscalErro($doc, $e->xMotivo);
+                }
+            }
 
             Log::warning('NFC-e rejeitada pela SEFAZ', [
                 'nfce_id' => $nfce->id,
@@ -117,5 +144,16 @@ class EmitirNfceJob implements ShouldQueue
             'status' => 'erro',
             'x_motivo' => $exception?->getMessage() ?? 'Falha desconhecida na emissão NFC-e',
         ]);
+
+        $nfce = $this->nfce->fresh();
+        if ($nfce?->documento_comercial_id) {
+            $doc = DocumentoComercial::find($nfce->documento_comercial_id);
+            if ($doc) {
+                app(DocumentoOrchestrator::class)->onFiscalErro(
+                    $doc,
+                    $exception?->getMessage() ?? 'Falha desconhecida na emissão NFC-e'
+                );
+            }
+        }
     }
 }

@@ -26,6 +26,32 @@ class ClienteController extends Controller
         return view('clientes.index', compact('clientes'));
     }
 
+    public function buscar(Request $request)
+    {
+        $empresaId = session('empresa_ativa');
+        $q = trim((string) $request->get('q', ''));
+
+        if ($q === '' || ! $empresaId) {
+            return response()->json([]);
+        }
+
+        $termClean = preg_replace('/\D/', '', $q) ?: '';
+
+        $clientes = Cliente::query()
+            ->where('empresa_id', $empresaId)
+            ->where(function ($query) use ($q, $termClean) {
+                $query->where('razao_social', 'like', '%'.$q.'%');
+                if ($termClean !== '') {
+                    $query->orWhere('cnpj', 'like', '%'.$termClean.'%');
+                }
+            })
+            ->orderBy('razao_social')
+            ->limit(10)
+            ->get(['id', 'razao_social', 'cnpj']);
+
+        return response()->json($clientes);
+    }
+
     public function create()
     {
         return view('clientes.create');

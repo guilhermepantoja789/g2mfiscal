@@ -40,7 +40,7 @@ class ConsultarNfse extends Command
         // 2. MONTAGEM DA URL (SIMPLIFICADA)
         // =================================================================
         // Base URL de Homologação
-        $baseUrl = config('services.nfse_nacional.url_sefin');
+        $baseUrl = \App\Services\NfseAmbiente::urlSefin();
 
         // Apenas a chave de acesso, conforme sua correção
         $url = "{$baseUrl}/{$chave}";

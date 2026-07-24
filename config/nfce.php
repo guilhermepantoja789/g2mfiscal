@@ -51,8 +51,27 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Cancelamento NFC-e
+    |--------------------------------------------------------------------------
+    | Prazo típico AM/MOC: 30 minutos após autorização.
+    */
+    'cancelamento_prazo_minutos' => (int) env('NFCE_CANCELAMENTO_PRAZO_MINUTOS', 30),
+
     'soap' => [
         'timeout' => (int) env('NFCE_SOAP_TIMEOUT', 60),
         'connect_timeout' => (int) env('NFCE_SOAP_CONNECT_TIMEOUT', 20),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | TLS / mTLS
+    |--------------------------------------------------------------------------
+    | SEFAZ-AM usa cadeia ICP-Brasil; o CA store do macOS/Herd costuma falhar
+    | com "self-signed certificate in certificate chain" (cURL errno 60).
+    | Em local/homolog o padrão é false. Em produção, prefira true + CA ICP-Brasil.
+    */
+    'ssl_verify' => filter_var(env('NFCE_SSL_VERIFY', false), FILTER_VALIDATE_BOOLEAN),
+    'ssl_cafile' => env('NFCE_SSL_CAFILE'),
 ];

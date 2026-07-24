@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Cobranca;
+use App\Models\LancamentoFinanceiro;
 use App\Models\NotaFiscal;
 use Illuminate\Support\Facades\Log;
 use App\Services\AsaasService;
@@ -42,6 +43,25 @@ class FinanceiroService
             Log::error("Erro ao gerar cobrança da nota {$nota->id}: " . $e->getMessage());
             throw $e;
         }
+    }
+
+    /**
+     * Cria cobrança rascunho a partir de lançamento financeiro gerencial (ponte P/R → Asaas).
+     */
+    public function gerarCobrancaDeLancamento(LancamentoFinanceiro $lancamento): Cobranca
+    {
+        return Cobranca::create([
+            'empresa_id' => $lancamento->empresa_id,
+            'cliente_id' => $lancamento->cliente_id,
+            'nota_fiscal_id' => null,
+            'lancamento_financeiro_id' => $lancamento->id,
+            'valor' => $lancamento->valor,
+            'vencimento' => $lancamento->vencimento,
+            'status' => 'RASCUNHO',
+            'descricao' => $lancamento->descricao
+                ?: ('Pré-lançamento ref. P/R #'.$lancamento->id),
+            'gateway' => 'manual',
+        ]);
     }
 
     /**

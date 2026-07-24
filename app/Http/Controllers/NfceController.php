@@ -7,8 +7,11 @@ use App\Core\FiscalEngine\Dto\NfcePayment;
 use App\Core\FiscalEngine\Exceptions\SefazRejectionException;
 use App\Core\FiscalEngine\Exceptions\SefazTransportException;
 use App\Jobs\EmitirNfceJob;
+use App\Models\DocumentoComercial;
 use App\Models\Empresa;
 use App\Models\Nfce;
+use App\Services\Erp\DocumentoOrchestrator;
+use App\Services\Erp\ModuloDashboardService;
 use App\Services\Fiscal\NfceDanfeService;
 use App\Services\Fiscal\NfceEmitRequest;
 use App\Services\Fiscal\RawNativeNfceIssuer;
@@ -18,6 +21,15 @@ use Illuminate\Support\Facades\Session;
 
 class NfceController extends Controller
 {
+    public function dashboard(Request $request, ModuloDashboardService $dashboards)
+    {
+        $empresa = $this->empresaAtiva();
+        [$inicio, $fim] = $dashboards->resolvePeriod($request);
+        $stats = $dashboards->nfce($empresa->id, $inicio, $fim);
+
+        return view('nfces.dashboard', compact('empresa', 'stats', 'inicio', 'fim'));
+    }
+
     public function index()
     {
         $empresa = $this->empresaAtiva();
@@ -41,22 +53,39 @@ class NfceController extends Controller
         $empresa = $this->empresaAtiva();
 
         $validated = $request->validate([
-            'descricao' => 'required|string|max:120',
-            'ncm' => 'required|string|max:8',
-            'cfop' => 'required|in:5102,5405',
-            'csosn' => 'required|in:102,500',
-            'unidade' => 'required|string|max:6',
-            'quantidade' => 'required|numeric|min:0.001',
-            'valor_unitario' => 'required|numeric|min:0.01',
+            'itens' => 'required|array|min:1|max:100',
+            'itens.*.descricao' => 'required|string|max:120',
+            'itens.*.ncm' => 'required|string|max:8',
+            'itens.*.cfop' => 'required|in:5102,5405',
+            'itens.*.csosn' => 'required|in:102,500',
+            'itens.*.unidade' => 'required|string|max:6',
+            'itens.*.quantidade' => 'required|numeric|min:0.001',
+            'itens.*.valor_unitario' => 'required|numeric|min:0.01',
             't_pag' => 'required|in:01,03,04,17',
             'v_troco' => 'nullable|numeric|min:0',
             'dest_doc' => 'nullable|string|max:18',
             'dest_nome' => 'nullable|string|max:120',
         ]);
 
-        $qtd = (float) $validated['quantidade'];
-        $vu = (float) $validated['valor_unitario'];
-        $total = round($qtd * $vu, 2);
+        $itensPayload = [];
+        $total = 0.0;
+        foreach ($validated['itens'] as $item) {
+            $qtd = (float) $item['quantidade'];
+            $vu = (float) $item['valor_unitario'];
+            $total = round($total + ($qtd * $vu), 2);
+            $itensPayload[] = [
+                'descricao' => $item['descricao'],
+                'ncm' => preg_replace('/\D/', '', $item['ncm']),
+                'cfop' => $item['cfop'],
+                'csosn' => $item['csosn'],
+                'unidade' => $item['unidade'],
+                'quantidade' => $qtd,
+                'valor_unitario' => $vu,
+                'pis_cst' => '49',
+                'cofins_cst' => '49',
+            ];
+        }
+
         $vTroco = isset($validated['v_troco']) ? (float) $validated['v_troco'] : null;
         $vPag = $validated['t_pag'] === '01' && $vTroco !== null && $vTroco > 0
             ? round($total + $vTroco, 2)
@@ -64,18 +93,11 @@ class NfceController extends Controller
 
         [$numero, $serie, $ambiente] = $issuer->reservarNumero($empresa);
 
+        $emContingencia = (bool) $empresa->nfce_contingencia;
+        $tpEmis = $emContingencia ? 9 : 1;
+
         $payload = [
-            'itens' => [[
-                'descricao' => $validated['descricao'],
-                'ncm' => preg_replace('/\D/', '', $validated['ncm']),
-                'cfop' => $validated['cfop'],
-                'csosn' => $validated['csosn'],
-                'unidade' => $validated['unidade'],
-                'quantidade' => $qtd,
-                'valor_unitario' => $vu,
-                'pis_cst' => '49',
-                'cofins_cst' => '49',
-            ]],
+            'itens' => $itensPayload,
             'pagamentos' => [[
                 't_pag' => $validated['t_pag'],
                 'v_pag' => $vPag,
@@ -84,6 +106,9 @@ class NfceController extends Controller
             'dest_doc' => $validated['dest_doc'] ? preg_replace('/\D/', '', $validated['dest_doc']) : null,
             'dest_nome' => $validated['dest_nome'] ?? null,
             'natureza' => 'VENDA',
+            'x_just_contingencia' => $emContingencia
+                ? ($empresa->nfce_contingencia_motivo ?: 'Falha de comunicacao com a SEFAZ')
+                : null,
         ];
 
         $nfce = Nfce::create([
@@ -91,7 +116,7 @@ class NfceController extends Controller
             'numero' => $numero,
             'serie' => $serie,
             'ambiente' => $ambiente,
-            'tp_emis' => 1,
+            'tp_emis' => $tpEmis,
             'status' => 'processando',
             'payload' => $payload,
             'valor_total' => $total,
@@ -101,14 +126,17 @@ class NfceController extends Controller
 
         EmitirNfceJob::dispatch($nfce);
 
-        return redirect()->route('nfces.show', $nfce->id)
-            ->with('success', 'NFC-e enviada para processamento assíncrono.');
+        $msg = $emContingencia
+            ? 'NFC-e em contingência: será gerada offline e transmitida quando a SEFAZ voltar.'
+            : 'NFC-e enviada para processamento assíncrono.';
+
+        return redirect()->route('nfces.show', $nfce->id)->with('success', $msg);
     }
 
     public function show(int $id)
     {
         $empresa = $this->empresaAtiva();
-        $nfce = Nfce::query()->where('empresa_id', $empresa->id)->findOrFail($id);
+        $nfce = Nfce::query()->where('empresa_id', $empresa->id)->with('documentoComercial')->findOrFail($id);
 
         return view('nfces.show', compact('empresa', 'nfce'));
     }
@@ -118,7 +146,126 @@ class NfceController extends Controller
         $empresa = $this->empresaAtiva();
         $nfce = Nfce::query()->where('empresa_id', $empresa->id)->findOrFail($id);
 
-        return $danfe->download($nfce);
+        if (! $nfce->podeImprimirDanfe()) {
+            return back()->with('error', 'DANFE disponível apenas para notas autorizadas, em contingência ou canceladas.');
+        }
+
+        try {
+            return $danfe->download($nfce);
+        } catch (\Throwable $e) {
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
+    public function cancelar(Request $request, int $id, RawNativeNfceIssuer $issuer, DocumentoOrchestrator $orchestrator)
+    {
+        $empresa = $this->empresaAtiva();
+        $nfce = Nfce::query()->where('empresa_id', $empresa->id)->findOrFail($id);
+
+        $validated = $request->validate([
+            'motivo' => 'required|string|min:15|max:255',
+        ]);
+
+        try {
+            $result = $issuer->cancelar($nfce, $validated['motivo']);
+
+            $nfce->refresh();
+            if ($nfce->documento_comercial_id) {
+                $doc = DocumentoComercial::query()->find($nfce->documento_comercial_id);
+                if ($doc) {
+                    $orchestrator->onFiscalCancelado($doc, $validated['motivo']);
+                }
+            }
+
+            return redirect()->route('nfces.show', $nfce->id)
+                ->with('success', "Cancelamento homologado [{$result->cStat}]: {$result->xMotivo}");
+        } catch (SefazRejectionException $e) {
+            return redirect()->route('nfces.show', $nfce->id)
+                ->with('error', "Cancelamento rejeitado [{$e->cStat}]: {$e->xMotivo}");
+        } catch (\Throwable $e) {
+            return redirect()->route('nfces.show', $nfce->id)
+                ->with('error', $e->getMessage());
+        }
+    }
+
+    public function transmitir(int $id)
+    {
+        $empresa = $this->empresaAtiva();
+        $nfce = Nfce::query()->where('empresa_id', $empresa->id)->findOrFail($id);
+
+        if (! $nfce->isPendenteTransmissao()) {
+            return back()->with('error', 'Somente NFC-e em contingência (pendente_transmissao) pode ser retransmitida.');
+        }
+
+        \App\Jobs\TransmitirNfceContingenciaJob::dispatch($nfce);
+
+        return redirect()->route('nfces.show', $nfce->id)
+            ->with('success', 'Transmissão de contingência enfileirada.');
+    }
+
+    public function recuperarDuplicidade(int $id, RawNativeNfceIssuer $issuer, \App\Services\Erp\DocumentoOrchestrator $orchestrator)
+    {
+        $empresa = $this->empresaAtiva();
+        $nfce = Nfce::query()->where('empresa_id', $empresa->id)->findOrFail($id);
+
+        try {
+            $result = $issuer->recuperarDuplicidade($nfce);
+            $nfce = $nfce->fresh();
+
+            if ($nfce->documento_comercial_id && $nfce->status === 'autorizada') {
+                $doc = \App\Models\DocumentoComercial::find($nfce->documento_comercial_id);
+                if ($doc) {
+                    $orchestrator->onFiscalAutorizado($doc);
+                }
+            }
+
+            return redirect()->route('nfces.show', $nfce->id)
+                ->with('success', "Duplicidade recuperada [{$result->cStat}]: chave {$result->chave}");
+        } catch (SefazRejectionException $e) {
+            return redirect()->route('nfces.show', $nfce->id)
+                ->with('error', "Recuperação rejeitada [{$e->cStat}]: {$e->xMotivo}");
+        } catch (\Throwable $e) {
+            return redirect()->route('nfces.show', $nfce->id)
+                ->with('error', $e->getMessage());
+        }
+    }
+
+    public function inutilizarForm()
+    {
+        $empresa = $this->empresaAtiva();
+
+        return view('nfces.inutilizar', compact('empresa'));
+    }
+
+    public function inutilizar(Request $request, RawNativeNfceIssuer $issuer)
+    {
+        $empresa = $this->empresaAtiva();
+
+        $validated = $request->validate([
+            'serie' => 'required|integer|min:0|max:999',
+            'numero_ini' => 'required|integer|min:1',
+            'numero_fin' => 'required|integer|min:1|gte:numero_ini',
+            'x_just' => 'required|string|min:15|max:255',
+            'profile' => 'nullable|in:homolog_nac,homolog,producao',
+        ]);
+
+        try {
+            $result = $issuer->inutilizar(
+                empresa: $empresa,
+                serie: (int) $validated['serie'],
+                numeroIni: (int) $validated['numero_ini'],
+                numeroFin: (int) $validated['numero_fin'],
+                xJust: $validated['x_just'],
+                endpointProfile: $validated['profile'] ?? null,
+            );
+
+            return redirect()->route('nfces.inutilizar.form')
+                ->with('success', "Inutilização homologada [{$result->cStat}]: {$result->xMotivo} — prot. {$result->protocolo}");
+        } catch (SefazRejectionException $e) {
+            return back()->withInput()->with('error', "Inutilização rejeitada [{$e->cStat}]: {$e->xMotivo}");
+        } catch (\Throwable $e) {
+            return back()->withInput()->with('error', $e->getMessage());
+        }
     }
 
     public function laboratorio()

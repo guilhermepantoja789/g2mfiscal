@@ -9,13 +9,12 @@ use App\Jobs\EmitirNfceJob;
 use App\Models\Empresa;
 use App\Models\Nfce;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Services\Erp\DocumentoOrchestrator;
 use Mockery;
 use Tests\TestCase;
 
 class EmitirNfceJobTest extends TestCase
 {
-    use RefreshDatabase;
 
     public function test_rejection_marks_rejeitado_without_throwing(): void
     {
@@ -27,7 +26,7 @@ class EmitirNfceJobTest extends TestCase
             ->once()
             ->andThrow(new SefazRejectionException('215', 'Rejeicao schema'));
 
-        (new EmitirNfceJob($nfce))->handle($issuer);
+        (new EmitirNfceJob($nfce))->handle($issuer, app(DocumentoOrchestrator::class));
 
         $nfce->refresh();
         $this->assertSame('rejeitado', $nfce->status);
@@ -62,7 +61,7 @@ class EmitirNfceJobTest extends TestCase
             }
         };
 
-        $job->handle($issuer);
+        $job->handle($issuer, app(DocumentoOrchestrator::class));
 
         $nfce->refresh();
         $this->assertSame('erro', $nfce->status);

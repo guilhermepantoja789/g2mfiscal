@@ -35,7 +35,7 @@ class ConsultarCnc extends Command
         $codMun = '1302603'; // Manaus
         $cnpj = preg_replace('/[^0-9]/', '', $empresa->cnpj); // 09279540000120
 
-        $url = config('services.nfse_nacional.url_adn') . '/cnc/consulta/cad';
+        $url = \App\Services\NfseAmbiente::urlAdn().'/cnc/consulta/cad';
 
         $this->info("2. Consultando CNC para CNPJ: $cnpj em Manaus ($codMun)...");
 

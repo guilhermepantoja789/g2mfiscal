@@ -1,3 +1,24 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+    [x-cloak] {
+        display: none !important;
+    }
+
+    :root {
+        --g2m-brand: #1e676d;
+        --g2m-brand-hover: #2a8a91;
+        --g2m-surface: #f1f5f9;
+        --g2m-ink: #0f172a;
+        --g2m-rail: 4rem;
+        --g2m-panel: 15rem;
+    }
+}
+
+@layer components {
+    .page-shell {
+        @apply space-y-6;
+    }
+}

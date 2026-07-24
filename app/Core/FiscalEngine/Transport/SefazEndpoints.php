@@ -71,4 +71,14 @@ class SefazEndpoints
     {
         return $this->url('consulta_chave', $profile);
     }
+
+    public function evento(?string $profile = null): string
+    {
+        return $this->url('evento', $profile);
+    }
+
+    public function inutilizacao(?string $profile = null): string
+    {
+        return $this->url('inutilizacao', $profile);
+    }
 }

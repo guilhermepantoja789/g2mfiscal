@@ -163,7 +163,4 @@
             });
         });
     </script>
-    <style>
-        [x-cloak] { display: none !important; }
-    </style>
-</x-app-layout>
+    </x-app-layout>

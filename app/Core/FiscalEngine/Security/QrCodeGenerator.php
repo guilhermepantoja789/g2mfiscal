@@ -12,6 +12,11 @@ class QrCodeGenerator
     ) {}
 
     /**
+     * QR online (tpEmis=1): chave|versao|tpAmb|idCSC|cHash
+     * QR contingência offline (tpEmis=9): chave|versao|tpAmb|dia|vNF|digValHex|idCSC|cHash
+     *
+     * Manual NT QR Code v2 (offline): dia = dd de dhEmi; digVal = DigestValue em hex ASCII.
+     *
      * @return array{url: string, params: string, cHash: string}
      */
     public function build(
@@ -20,17 +25,39 @@ class QrCodeGenerator
         string $cscId,
         string $cscToken,
         string $baseUrl,
+        int $tpEmis = 1,
+        ?string $dhEmi = null,
+        ?string $vNF = null,
+        ?string $digVal = null,
     ): array {
         $chave = preg_replace('/\D/', '', $chave) ?? '';
-        $cscId = ltrim($cscId, '0') ?: '0';
-        $cscIdPadded = str_pad($cscId, 6, '0', STR_PAD_LEFT);
+        // QR Code v2 (XSD): idCSC sem zeros à esquerda — "000001" falha no pattern e causa cStat 215.
+        $cscId = ltrim(preg_replace('/\D/', '', $cscId) ?? '', '0') ?: '0';
 
-        $params = implode('|', [
-            $chave,
-            $this->qrcodeVersion,
-            (string) $tpAmb,
-            $cscIdPadded,
-        ]);
+        if ($tpEmis === 9) {
+            if ($dhEmi === null || $vNF === null || $digVal === null || $digVal === '') {
+                throw new \InvalidArgumentException('QR contingência exige dhEmi, vNF e digVal.');
+            }
+            // NT Manual QR Code v2 offline: dia (dd) + DigestValue em hex ASCII (não base64 cru).
+            $dia = (new \DateTimeImmutable($dhEmi))->format('d');
+            $digHex = $this->str2Hex($digVal);
+            $params = implode('|', [
+                $chave,
+                $this->qrcodeVersion,
+                (string) $tpAmb,
+                $dia,
+                $vNF,
+                $digHex,
+                $cscId,
+            ]);
+        } else {
+            $params = implode('|', [
+                $chave,
+                $this->qrcodeVersion,
+                (string) $tpAmb,
+                $cscId,
+            ]);
+        }
 
         $cHash = $this->cHash($params, $cscToken);
         $query = $params.'|'.$cHash;
@@ -49,6 +76,20 @@ class QrCodeGenerator
     public function cHash(string $paramsWithoutHash, string $cscToken): string
     {
         return strtoupper(sha1($paramsWithoutHash.$cscToken));
+    }
+
+    /**
+     * Converte DigestValue (base64) para hex ASCII — exigência NT QR Code v2 offline.
+     */
+    public function str2Hex(string $str): string
+    {
+        $hex = '';
+        $len = strlen($str);
+        for ($i = 0; $i < $len; $i++) {
+            $hex .= sprintf('%02x', ord($str[$i]));
+        }
+
+        return $hex;
     }
 
     /**
@@ -80,12 +121,12 @@ class QrCodeGenerator
         }
 
         $supl = $dom->createElementNS('http://www.portalfiscal.inf.br/nfe', 'infNFeSupl');
-        $qrCode = $dom->createElement('qrCode', $qrCodeUrl);
+        $qrCode = $dom->createElementNS('http://www.portalfiscal.inf.br/nfe', 'qrCode', $qrCodeUrl);
         $supl->appendChild($qrCode);
-        $urlChaveEl = $dom->createElement('urlChave', $urlChave);
+        $urlChaveEl = $dom->createElementNS('http://www.portalfiscal.inf.br/nfe', 'urlChave', $urlChave);
         $supl->appendChild($urlChaveEl);
 
-        // infNFeSupl deve vir imediatamente após infNFe (antes da Signature)
+        // Schema TNFe: infNFe → infNFeSupl → Signature
         $signature = $xpath->query('//*[local-name()="Signature"]')->item(0);
         if ($signature) {
             $nfe->insertBefore($supl, $signature);

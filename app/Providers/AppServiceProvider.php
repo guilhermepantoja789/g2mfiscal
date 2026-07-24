@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Contracts\FiscalIssuerInterface;
 use App\Services\Fiscal\RawNativeNfceIssuer;
+use App\Support\Navigation\EmpresaNavBuilder;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
 
@@ -29,6 +31,18 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        View::composer('layouts.app', function ($view) {
+            $nav = app(EmpresaNavBuilder::class)->build();
+            $empresa = $nav['empresa'] ?? null;
+
+            $view->with([
+                'nav' => $nav,
+                'empresaAtiva' => $empresa,
+                'nomeEmpresaExibicao' => $empresa
+                    ? ($empresa->nome_fantasia ?: $empresa->razao_social)
+                    : 'Painel',
+                'cnpjEmpresaExibicao' => $empresa?->cnpj ?? '',
+            ]);
+        });
     }
 }

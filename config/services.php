@@ -34,12 +34,36 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+
+    'financeiro' => [
+        // Gateway Asaas / cobranças (convive com P/R gerencial)
+        'enabled' => filter_var(env('FEATURE_FINANCEIRO', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
     'nfse' => [
-        'endpoint' => env('NFSE_ENDPOINT', 'https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse'),
+        'endpoint' => env('NFSE_ENDPOINT'), // legado; preferir nfse_nacional
     ],
     'nfse_nacional' => [
-        'url_sefin' => env('NFSE_NACIONAL_URL_SEFIN', 'https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse'),
-        'url_adn'   => env('NFSE_NACIONAL_URL_ADN', 'https://adn.producaorestrita.nfse.gov.br'),
+        // 1 = produção | 2 = homologação (produção restrita). Null = deriva de APP_ENV.
+        'tp_amb' => env('NFSE_NACIONAL_TP_AMB'),
+
+        // Overrides opcionais (se vazios, usa urls conforme tp_amb).
+        'url_sefin' => env('NFSE_NACIONAL_URL_SEFIN'),
+        'url_adn' => env('NFSE_NACIONAL_URL_ADN'),
+        'url_consulta_api' => env('NFSE_NACIONAL_URL_CONSULTA_API'),
         'url_consulta' => env('NFSE_NACIONAL_URL_CONSULTA_PUBLICA', 'https://www.nfse.gov.br/ConsultaPublica'),
+
+        'urls' => [
+            'producao' => [
+                'sefin' => 'https://sefin.nfse.gov.br/SefinNacional/nfse',
+                'adn' => 'https://adn.nfse.gov.br',
+                'consulta' => 'https://api.nfse.gov.br/nfse/v1/nfse',
+            ],
+            'homologacao' => [
+                'sefin' => 'https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse',
+                'adn' => 'https://adn.producaorestrita.nfse.gov.br',
+                'consulta' => 'https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse',
+            ],
+        ],
     ],
 ];

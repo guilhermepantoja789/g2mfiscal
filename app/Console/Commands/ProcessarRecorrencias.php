@@ -98,7 +98,10 @@ class ProcessarRecorrencias extends Command
                     'servico_id' => $rec->servico_id,
 
                     'status'     => $rec->emitir_automaticamente ? 'processando' : 'criada',
-                    'ambiente'   => config('app.env') === 'production' ? 'producao' : 'homologacao',
+                    'ambiente'   => \App\Services\NfseAmbiente::label(),
+                    'numero_dps' => $rec->emitir_automaticamente
+                        ? \App\Services\NfseDpsNumero::reservar($rec->empresa)
+                        : null,
 
                     'tomador_cnpj'  => $rec->tomador_cnpj,
                     'tomador_nome'  => $rec->tomador_nome,
@@ -164,76 +167,40 @@ class ProcessarRecorrencias extends Command
 
     private function emitirNotaAutomaticamente(NotaFiscal $nota)
     {
-        $this->info("   -> Emitindo na API...");
+        $this->info('   -> Emitindo na API...');
 
         try {
-            if (!$nota->servico) throw new \Exception("Serviço não vinculado.");
+            $nota->loadMissing(['cliente', 'servico', 'empresa.certificado', 'cobranca']);
+            $dados = \App\Services\NfseEmitPayloadBuilder::fromNota($nota);
 
-            $codMun = $nota->servico->codigo_tributacao_municipal;
-            $codNbs = $nota->servico->codigo_tributacao_nacional;
-
-            // Instancia Service
             $service = new NfseNacionalService($nota->empresa);
-
-            // Monta dados IDÊNTICO ao NotaFiscalController
-            $dados = [
-                'numero' => $nota->id,
-                'serie' => '1',
-                'competencia' => $nota->emissao->format('Y-m-d'),
-
-                'tomador_doc' => $nota->tomador_cnpj,
-                'tomador_nome' => $nota->tomador_nome,
-                'tomador_email' => $nota->tomador_email,
-
-                // Endereço via relacionamento cliente (garantido no passo 0)
-                'tomador_endereco' => $nota->cliente->logradouro ?? '',
-                'tomador_numero'   => $nota->cliente->numero ?? 'S/N',
-                'tomador_bairro'   => $nota->cliente->bairro ?? 'Centro',
-                'tomador_cep'      => $nota->cliente->cep ?? '',
-                'tomador_cidade_codigo' => $nota->cliente->cidade_codigo ?? '1302603',
-                'tomador_uf'       => $nota->cliente->uf ?? 'AM',
-
-                'valor' => $nota->valor_servico,
-                'discriminacao' => $nota->descricao,
-                'tributacao_iss' => $nota->trib_issqn,
-                'retencao_iss' => $nota->tp_ret_issqn,
-
-                'servico_nbs' => $codNbs,
-                'servico_municipal' => $codMun,
-
-                'aliquota' => ($nota->p_tot_trib_mun > 0) ? $nota->p_tot_trib_mun : 2.00,
-
-                'v_tot_trib_fed' => $nota->v_tot_trib_fed,
-                'v_tot_trib_est' => $nota->v_tot_trib_est,
-                'v_tot_trib_mun' => $nota->v_tot_trib_mun,
-            ];
-
-            $retorno = $service->emitirNota($dados);
+            $retorno = $service->emitirNota($dados, $nota);
 
             if ($retorno['sucesso']) {
                 $nota->update([
                     'status' => 'autorizada',
+                    'ambiente' => \App\Services\NfseAmbiente::label(),
                     'numero_nfse' => $retorno['numero_nota'],
                     'codigo_verificacao' => $retorno['codigo_verificacao'] ?? null,
                     'chave_acesso' => $retorno['chave_acesso'] ?? null,
-                    'xml_autorizado' => $retorno['xml_autorizado']
+                    'xml_autorizado' => $retorno['xml_autorizado'],
+                    'xml_enviado' => $retorno['xml_dps_enviado'] ?? $nota->xml_enviado,
                 ]);
 
-                // Gap 2 Corrigido: Ativar a cobrança
                 if ($nota->cobranca) {
                     $financeiroService = app(FinanceiroService::class);
                     $financeiroService->ativarCobranca($nota->cobranca);
-                    
-                    $nota->cobranca->update(['descricao' => 'Ref. NFS-e Nº ' . $retorno['numero_nota']]);
-                    $this->info("   -> Cobrança ativada (PENDING).");
+
+                    $nota->cobranca->update(['descricao' => 'Ref. NFS-e Nº '.$retorno['numero_nota']]);
+                    $this->info('   -> Cobrança ativada (PENDING).');
                 }
 
-                $this->info("   -> SUCESSO! Nota: " . $retorno['numero_nota']);
+                $this->info('   -> SUCESSO! Nota: '.$retorno['numero_nota']);
             } else {
                 $msg = $retorno['mensagem'];
-                if(isset($retorno['erros']) && is_array($retorno['erros'])) {
+                if (isset($retorno['erros']) && is_array($retorno['erros'])) {
                     $msgs = [];
-                    foreach($retorno['erros'] as $e) {
+                    foreach ($retorno['erros'] as $e) {
                         $msgs[] = is_array($e) ? ($e['Descricao'] ?? json_encode($e)) : $e;
                     }
                     $msg = implode(' | ', $msgs);
@@ -242,14 +209,14 @@ class ProcessarRecorrencias extends Command
                 $nota->update([
                     'status' => 'erro',
                     'mensagem_erro' => $msg,
-                    'xml_enviado' => $retorno['xml_dps_enviado'] ?? null
+                    'xml_enviado' => $retorno['xml_dps_enviado'] ?? $nota->xml_enviado,
                 ]);
-                $this->error("   -> FALHA: " . $msg);
+                $this->error('   -> FALHA: '.$msg);
             }
 
         } catch (\Exception $e) {
             $nota->update(['status' => 'erro', 'mensagem_erro' => $e->getMessage()]);
-            $this->error("   -> EXCEPTION: " . $e->getMessage());
+            $this->error('   -> EXCEPTION: '.$e->getMessage());
         }
     }
 

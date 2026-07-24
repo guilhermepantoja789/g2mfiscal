@@ -154,9 +154,9 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Regime Tributário</label>
                             <select name="regime_tributario" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-[#1e676d] focus:ring-[#1e676d] py-2.5">
-                                <option value="1" {{ old('regime_tributario', $empresa->regime_tributario) == '1' ? 'selected' : '' }}>Simples Nacional</option>
-                                <option value="2" {{ old('regime_tributario', $empresa->regime_tributario) == '2' ? 'selected' : '' }}>Simples Nacional - Excesso</option>
-                                <option value="3" {{ old('regime_tributario', $empresa->regime_tributario) == '3' ? 'selected' : '' }}>Regime Normal (Lucro Presumido/Real)</option>
+                                <option value="1" {{ old('regime_tributario', $empresa->regime_tributario) == '1' ? 'selected' : '' }}>1 — Não optante do Simples</option>
+                                <option value="2" {{ old('regime_tributario', $empresa->regime_tributario) == '2' ? 'selected' : '' }}>2 — MEI</option>
+                                <option value="3" {{ old('regime_tributario', $empresa->regime_tributario) == '3' ? 'selected' : '' }}>3 — ME/EPP optante do Simples</option>
                             </select>
                         </div>
 
