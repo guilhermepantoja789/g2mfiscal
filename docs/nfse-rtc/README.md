@@ -7,7 +7,7 @@ Documentação técnica local para a adequação do emissor DPS → SEFIN.
 - Portal: https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual
 - XSD: `nfse-esquemas-xsd-v1.01-20260209.zip` → pasta `xsd/Schemas/1.01/`
 - Anexo C (IndOp): `anexo-c-indop-ibscbs-v1.01-20260122.xlsx`
-- Anexo I (layout DPS/NFS-e): `anexo-i-dps-nfse-v1.01-20260209.xlsx`
+- Anexo I (layout DPS/NFS-e): `anexo_i-sefin_adn-dps_nfse-snnfse-v1-01-20260209.xlsx`
 - NT 004 (RTC IBSCBS): layout DPS / regras de negócio
 
 ## DPS v1.01 — ordem do grupo `IBSCBS` (contribuinte)
