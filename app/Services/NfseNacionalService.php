@@ -302,8 +302,10 @@ class NfseNacionalService
         $vEst = number_format($dados['v_tot_trib_est'] ?? 0, 2, '.', '');
         $vMun = number_format($dados['v_tot_trib_mun'] ?? 0, 2, '.', '');
 
+        $tagIbscbs = NfseIbscbsBuilder::toXml($dados);
+
         $xml = <<<XML
-<DPS xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.00">
+<DPS xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.01">
     <infDPS Id="{$idDps}">
         <tpAmb>{$tpAmb}</tpAmb>
         <dhEmi>{$dataEmissao}</dhEmi>
@@ -352,6 +354,7 @@ class NfseNacionalService
                 </totTrib>
             </trib>
         </valores>
+        {$tagIbscbs}
     </infDPS>
 </DPS>
 XML;

@@ -7,6 +7,8 @@ use App\Models\NotaFiscal;
 use App\Models\Servico;
 use App\Models\Cliente;
 use App\Models\Empresa;
+use App\Models\IndOp;
+use App\Models\ClassTrib;
 use App\Services\NfseNacionalService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -69,8 +71,10 @@ class NotaFiscalController extends Controller
 
         $servicos = Servico::where('empresa_id', $empresaId)->orderBy('nome')->get();
         $clientes = Cliente::where('empresa_id', $empresaId)->orderBy('razao_social')->get();
+        $indOps = IndOp::query()->where('ativo', true)->orderBy('codigo')->get();
+        $classTribs = ClassTrib::query()->where('ativo', true)->orderBy('cst')->orderBy('c_class_trib')->get();
 
-        return view('notas.criar', compact('servicos', 'clientes'));
+        return view('notas.criar', compact('servicos', 'clientes', 'indOps', 'classTribs'));
     }
 
     /**
@@ -118,6 +122,13 @@ class NotaFiscalController extends Controller
                 'tp_ret_issqn'   => $data['tp_ret_issqn'],
                 // Garante que a alíquota venha do form ou seja 0
                 'aliquota_iss'   => $data['aliquota_iss'] ?? 0,
+
+                'fin_nfse' => $data['fin_nfse'] ?? null,
+                'ind_final' => $data['ind_final'] ?? null,
+                'ind_dest' => $data['ind_dest'] ?? '0',
+                'c_ind_op' => $data['c_ind_op'] ?? null,
+                'cst_ibscbs' => $data['cst_ibscbs'] ?? null,
+                'c_class_trib' => $data['c_class_trib'] ?? null,
 
                 // Valores de Tributos Aproximados
                 'v_tot_trib_fed' => $data['v_tot_trib_fed'] ?? 0,
@@ -181,8 +192,10 @@ class NotaFiscalController extends Controller
 
         $servicos = Servico::where('empresa_id', $empresaId)->orderBy('nome')->get();
         $clientes = Cliente::where('empresa_id', $empresaId)->orderBy('razao_social')->get();
+        $indOps = IndOp::query()->where('ativo', true)->orderBy('codigo')->get();
+        $classTribs = ClassTrib::query()->where('ativo', true)->orderBy('cst')->orderBy('c_class_trib')->get();
 
-        return view('notas.editar', compact('nota', 'servicos', 'clientes'));
+        return view('notas.editar', compact('nota', 'servicos', 'clientes', 'indOps', 'classTribs'));
     }
 
     /**
@@ -237,6 +250,13 @@ class NotaFiscalController extends Controller
                 'trib_issqn'     => $data['trib_issqn'],
                 'tp_ret_issqn'   => $data['tp_ret_issqn'],
                 'aliquota_iss'   => $data['aliquota_iss'],
+
+                'fin_nfse' => $data['fin_nfse'] ?? null,
+                'ind_final' => $data['ind_final'] ?? null,
+                'ind_dest' => $data['ind_dest'] ?? '0',
+                'c_ind_op' => $data['c_ind_op'] ?? null,
+                'cst_ibscbs' => $data['cst_ibscbs'] ?? null,
+                'c_class_trib' => $data['c_class_trib'] ?? null,
 
                 'v_tot_trib_fed' => $data['v_tot_trib_fed'] ?? 0,
                 'v_tot_trib_est' => $data['v_tot_trib_est'] ?? 0,

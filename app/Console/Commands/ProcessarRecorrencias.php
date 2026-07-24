@@ -92,6 +92,7 @@ class ProcessarRecorrencias extends Command
                 // ---------------------------------------------------------
                 // PASSO C: CRIAR A NOTA
                 // ---------------------------------------------------------
+                $servico = $rec->servico;
                 $nota = NotaFiscal::create([
                     'empresa_id' => $rec->empresa_id,
                     'cliente_id' => $clienteId,
@@ -113,6 +114,12 @@ class ProcessarRecorrencias extends Command
 
                     'trib_issqn'    => $rec->trib_issqn,
                     'tp_ret_issqn'  => $rec->tp_ret_issqn,
+
+                    'fin_nfse' => $servico?->fin_nfse ?: \App\Services\NfseIbscbsBuilder::DEFAULT_FIN_NFSE,
+                    'c_ind_op' => $servico?->c_ind_op ?: \App\Services\NfseIbscbsBuilder::DEFAULT_C_IND_OP,
+                    'cst_ibscbs' => $servico?->cst_ibscbs ?: \App\Services\NfseIbscbsBuilder::DEFAULT_CST,
+                    'c_class_trib' => $servico?->c_class_trib ?: \App\Services\NfseIbscbsBuilder::DEFAULT_C_CLASS_TRIB,
+                    'ind_dest' => \App\Services\NfseIbscbsBuilder::DEFAULT_IND_DEST,
 
                     // Salva Porcentagens e Valores
                     'p_tot_trib_fed' => $pFed,

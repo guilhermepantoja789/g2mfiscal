@@ -28,6 +28,31 @@ class NfseEmitPayloadBuilderTest extends TestCase
         $this->assertSame('99', $payload['serie']);
         $this->assertSame('RUA A', $payload['tomador_endereco']);
         $this->assertSame('010301', $payload['servico_nbs']);
+        $this->assertSame('100301', $payload['c_ind_op']);
+        $this->assertSame('000', $payload['cst_ibscbs']);
+        $this->assertSame('000001', $payload['c_class_trib']);
+        $this->assertSame('0', $payload['fin_nfse']);
+        $this->assertNull($payload['ind_final']); // CPF → derivado no builder XML
+    }
+
+    public function test_nota_override_wins_over_servico(): void
+    {
+        Config::set('services.nfse_nacional.tp_amb', 2);
+
+        $nota = $this->makeNota();
+        $nota->update([
+            'c_ind_op' => '050101',
+            'cst_ibscbs' => '410',
+            'c_class_trib' => '410001',
+            'ind_final' => '0',
+        ]);
+
+        $payload = NfseEmitPayloadBuilder::fromNota($nota->fresh(['cliente', 'servico']));
+
+        $this->assertSame('050101', $payload['c_ind_op']);
+        $this->assertSame('410', $payload['cst_ibscbs']);
+        $this->assertSame('410001', $payload['c_class_trib']);
+        $this->assertSame('0', $payload['ind_final']);
     }
 
     public function test_rejects_incomplete_cliente(): void
@@ -78,6 +103,10 @@ class NfseEmitPayloadBuilderTest extends TestCase
             'codigo_tributacao_nacional' => '010301',
             'codigo_tributacao_municipal' => '100',
             'valor_unitario' => 100,
+            'fin_nfse' => '0',
+            'c_ind_op' => '100301',
+            'cst_ibscbs' => '000',
+            'c_class_trib' => '000001',
         ]);
 
         return NotaFiscal::create([

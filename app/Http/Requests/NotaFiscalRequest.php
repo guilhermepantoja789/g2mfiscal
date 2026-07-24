@@ -75,6 +75,12 @@ class NotaFiscalRequest extends FormRequest
             'descricao'      => 'required|string|min:5',
             'trib_issqn'     => 'required|integer',
             'tp_ret_issqn'   => 'required|integer',
+            'fin_nfse'       => 'nullable|in:0',
+            'ind_final'      => 'nullable|in:0,1',
+            'ind_dest'       => 'nullable|in:0,1',
+            'c_ind_op'       => 'nullable|digits:6|exists:ind_ops,codigo',
+            'cst_ibscbs'     => 'nullable|digits:3',
+            'c_class_trib'   => 'nullable|digits:6',
             'vencimento'     => 'required_if:gerar_cobranca,1|date|nullable|after_or_equal:today',
         ];
     }

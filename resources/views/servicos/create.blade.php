@@ -97,6 +97,48 @@
                     </div>
                 </div>
 
+                <div class="bg-indigo-50 p-4 rounded-md border border-indigo-200 space-y-4">
+                    <div>
+                        <h3 class="text-sm font-bold text-indigo-900">IBS/CBS (Reforma Tributária)</h3>
+                        <p class="text-xs text-indigo-700 mt-1">Obrigatório na DPS a partir de 03/08/2026. Defaults sugeridos para serviços à distância em Manaus.</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700">Finalidade (finNFSe) *</label>
+                            <select name="fin_nfse" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                <option value="0" {{ old('fin_nfse', '0') === '0' ? 'selected' : '' }}>0 - NFS-e regular</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700">Indicador da operação (cIndOp) *</label>
+                            <select name="c_ind_op" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                @foreach($indOps as $indOp)
+                                    <option value="{{ $indOp->codigo }}" {{ old('c_ind_op', '100301') == $indOp->codigo ? 'selected' : '' }}>
+                                        {{ $indOp->codigo }} — {{ \Illuminate\Support\Str::limit($indOp->descricao, 70) }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-bold text-gray-700">CST / Classificação Tributária *</label>
+                            <select name="class_trib_pair" id="class_trib_pair" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                                    onchange="const p=this.value.split('|'); document.getElementById('cst_ibscbs').value=p[0]||''; document.getElementById('c_class_trib').value=p[1]||'';">
+                                @php
+                                    $oldPair = old('cst_ibscbs', '000').'|'.old('c_class_trib', '000001');
+                                @endphp
+                                @foreach($classTribs as $ct)
+                                    @php $pair = $ct->cst.'|'.$ct->c_class_trib; @endphp
+                                    <option value="{{ $pair }}" {{ $oldPair === $pair ? 'selected' : '' }}>
+                                        {{ $ct->cst }}/{{ $ct->c_class_trib }} — {{ \Illuminate\Support\Str::limit($ct->descricao, 70) }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <input type="hidden" name="cst_ibscbs" id="cst_ibscbs" value="{{ old('cst_ibscbs', '000') }}">
+                            <input type="hidden" name="c_class_trib" id="c_class_trib" value="{{ old('c_class_trib', '000001') }}">
+                        </div>
+                    </div>
+                </div>
+
                 <div>
                     <label class="block text-sm font-bold text-gray-700">Valor Unitário Padrão (R$)</label>
                     <input type="text" name="valor_unitario" value="{{ old('valor_unitario') }}" required
@@ -147,6 +189,15 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            const pair = document.getElementById('class_trib_pair');
+            if (pair && pair.value) {
+                const p = pair.value.split('|');
+                const cst = document.getElementById('cst_ibscbs');
+                const cls = document.getElementById('c_class_trib');
+                if (cst) cst.value = p[0] || '';
+                if (cls) cls.value = p[1] || '';
+            }
+
             function maskMoney(val) {
                 if(!val) return '';
                 val = val.replace(/\D/g, '');

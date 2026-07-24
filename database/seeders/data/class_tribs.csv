@@ -1,0 +1,8 @@
+cst,c_class_trib,descricao,ativo
+000,000001,Situações tributadas integralmente pelo IBS e pela CBS,1
+000,000002,Situações tributadas integralmente pelo IBS e pela CBS com redução de base de cálculo,1
+200,200001,Alíquota zero,1
+200,200002,Alíquota zero da CBS e redução de 60% da alíquota do IBS,1
+410,410001,Imunidade e não incidência,1
+400,400001,Isenção,1
+510,510001,Diferimento,1

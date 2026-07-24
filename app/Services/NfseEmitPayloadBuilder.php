@@ -34,6 +34,9 @@ class NfseEmitPayloadBuilder
 
         $aliqVal = ($nota->p_tot_trib_mun > 0) ? $nota->p_tot_trib_mun : 2.00;
 
+        $servico = $nota->servico;
+        $ibscbs = self::resolveIbscbs($nota, $servico);
+
         return [
             'numero' => (int) ($nota->numero_dps ?: $nota->id),
             'serie' => NfseAmbiente::serie(),
@@ -64,6 +67,46 @@ class NfseEmitPayloadBuilder
             'v_tot_trib_fed' => $nota->v_tot_trib_fed,
             'v_tot_trib_est' => $nota->v_tot_trib_est,
             'v_tot_trib_mun' => $nota->v_tot_trib_mun,
+
+            'fin_nfse' => $ibscbs['fin_nfse'],
+            'ind_final' => $ibscbs['ind_final'],
+            'ind_dest' => $ibscbs['ind_dest'],
+            'c_ind_op' => $ibscbs['c_ind_op'],
+            'cst_ibscbs' => $ibscbs['cst_ibscbs'],
+            'c_class_trib' => $ibscbs['c_class_trib'],
+        ];
+    }
+
+    /**
+     * @return array{fin_nfse: string, ind_final: ?string, ind_dest: string, c_ind_op: string, cst_ibscbs: string, c_class_trib: string}
+     */
+    public static function resolveIbscbs(NotaFiscal $nota, $servico): array
+    {
+        $pick = static function (?string $notaVal, ?string $servicoVal, string $default): string {
+            $notaVal = $notaVal !== null ? trim($notaVal) : '';
+            if ($notaVal !== '') {
+                return $notaVal;
+            }
+            $servicoVal = $servicoVal !== null ? trim($servicoVal) : '';
+            if ($servicoVal !== '') {
+                return $servicoVal;
+            }
+
+            return $default;
+        };
+
+        $indFinal = $nota->ind_final;
+        if ($indFinal === null || trim((string) $indFinal) === '') {
+            $indFinal = null; // NfseIbscbsBuilder deriva do documento
+        }
+
+        return [
+            'fin_nfse' => $pick($nota->fin_nfse, $servico->fin_nfse ?? null, NfseIbscbsBuilder::DEFAULT_FIN_NFSE),
+            'ind_final' => $indFinal,
+            'ind_dest' => $pick($nota->ind_dest, null, NfseIbscbsBuilder::DEFAULT_IND_DEST),
+            'c_ind_op' => $pick($nota->c_ind_op, $servico->c_ind_op ?? null, NfseIbscbsBuilder::DEFAULT_C_IND_OP),
+            'cst_ibscbs' => $pick($nota->cst_ibscbs, $servico->cst_ibscbs ?? null, NfseIbscbsBuilder::DEFAULT_CST),
+            'c_class_trib' => $pick($nota->c_class_trib, $servico->c_class_trib ?? null, NfseIbscbsBuilder::DEFAULT_C_CLASS_TRIB),
         ];
     }
 

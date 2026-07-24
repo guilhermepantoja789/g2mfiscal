@@ -38,6 +38,12 @@ class NotaFiscal extends Model
         // Fiscal
         'trib_issqn',
         'tp_ret_issqn',
+        'fin_nfse',
+        'ind_final',
+        'ind_dest',
+        'c_ind_op',
+        'cst_ibscbs',
+        'c_class_trib',
         'aliquota_iss',
 
         // Tributos Aprox

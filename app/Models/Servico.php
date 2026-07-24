@@ -16,6 +16,10 @@ class Servico extends Model
         'codigo_tributacao_nacional', // Ex: 1.03.01
         'codigo_tributacao_municipal', // Ex: 1234
         'codigo_nbs',
+        'fin_nfse',
+        'c_ind_op',
+        'cst_ibscbs',
+        'c_class_trib',
         'descricao',
         'valor_unitario',
     ];

@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Servico;
 use App\Models\Empresa;
 use App\Models\TributacaoNacional;
+use App\Models\IndOp;
+use App\Models\ClassTrib;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Session;
@@ -38,7 +40,10 @@ class ServicoController extends Controller
             ->orderBy('codigo')
             ->get();
 
-        return view('servicos.create', compact('isManaus', 'padraoMunicipal', 'codigosNacionais'));
+        $indOps = IndOp::query()->where('ativo', true)->orderBy('codigo')->get();
+        $classTribs = ClassTrib::query()->where('ativo', true)->orderBy('cst')->orderBy('c_class_trib')->get();
+
+        return view('servicos.create', compact('isManaus', 'padraoMunicipal', 'codigosNacionais', 'indOps', 'classTribs'));
     }
 
     public function store(Request $request)
@@ -62,13 +67,33 @@ class ServicoController extends Controller
             'codigo_tributacao_nacional' => 'required|string',
             'codigo_tributacao_municipal' => 'required|string',
             'valor_unitario' => 'required|numeric|min:0',
+            'fin_nfse' => 'required|in:0',
+            'c_ind_op' => ['required', 'digits:6', Rule::exists('ind_ops', 'codigo')],
+            'cst_ibscbs' => 'required|digits:3',
+            'c_class_trib' => [
+                'required',
+                'digits:6',
+                Rule::exists('class_tribs', 'c_class_trib')->where(fn ($q) => $q->where('cst', $request->input('cst_ibscbs'))),
+            ],
             'codigo_interno' => [
                 'nullable', 'string',
                 Rule::unique('servicos')->where(fn ($q) => $q->where('empresa_id', $empresa->id))
             ],
         ]);
 
-        $empresa->servicos()->create($request->all());
+        $empresa->servicos()->create($request->only([
+            'nome',
+            'codigo_interno',
+            'codigo_tributacao_nacional',
+            'codigo_tributacao_municipal',
+            'codigo_nbs',
+            'fin_nfse',
+            'c_ind_op',
+            'cst_ibscbs',
+            'c_class_trib',
+            'descricao',
+            'valor_unitario',
+        ]));
 
         return redirect()->route('servicos.index')->with('success', 'Serviço cadastrado!');
     }
@@ -86,7 +111,10 @@ class ServicoController extends Controller
             ->orderBy('codigo')
             ->get();
 
-        return view('servicos.edit', compact('servico', 'isManaus', 'codigosNacionais'));
+        $indOps = IndOp::query()->where('ativo', true)->orderBy('codigo')->get();
+        $classTribs = ClassTrib::query()->where('ativo', true)->orderBy('cst')->orderBy('c_class_trib')->get();
+
+        return view('servicos.edit', compact('servico', 'isManaus', 'codigosNacionais', 'indOps', 'classTribs'));
     }
 
     public function update(Request $request, Servico $servico)
@@ -108,13 +136,33 @@ class ServicoController extends Controller
             'codigo_tributacao_nacional' => 'required|string',
             'codigo_tributacao_municipal' => 'required|string',
             'valor_unitario' => 'required|numeric|min:0',
+            'fin_nfse' => 'required|in:0',
+            'c_ind_op' => ['required', 'digits:6', Rule::exists('ind_ops', 'codigo')],
+            'cst_ibscbs' => 'required|digits:3',
+            'c_class_trib' => [
+                'required',
+                'digits:6',
+                Rule::exists('class_tribs', 'c_class_trib')->where(fn ($q) => $q->where('cst', $request->input('cst_ibscbs'))),
+            ],
             'codigo_interno' => [
                 'nullable', 'string',
                 Rule::unique('servicos')->where(fn ($q) => $q->where('empresa_id', $servico->empresa_id))->ignore($servico->id)
             ],
         ]);
 
-        $servico->update($request->all());
+        $servico->update($request->only([
+            'nome',
+            'codigo_interno',
+            'codigo_tributacao_nacional',
+            'codigo_tributacao_municipal',
+            'codigo_nbs',
+            'fin_nfse',
+            'c_ind_op',
+            'cst_ibscbs',
+            'c_class_trib',
+            'descricao',
+            'valor_unitario',
+        ]));
 
         return redirect()->route('servicos.index')->with('success', 'Serviço atualizado!');
     }

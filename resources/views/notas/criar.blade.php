@@ -139,7 +139,11 @@
                         @foreach($servicos as $servico)
                             <option value="{{ $servico->id }}"
                                     data-valor="{{ number_format($servico->valor_unitario, 2, ',', '.') }}"
-                                    data-descricao="{{ $servico->descricao }}">
+                                    data-descricao="{{ $servico->descricao }}"
+                                    data-c-ind-op="{{ $servico->c_ind_op }}"
+                                    data-cst="{{ $servico->cst_ibscbs }}"
+                                    data-c-class-trib="{{ $servico->c_class_trib }}"
+                                    data-fin-nfse="{{ $servico->fin_nfse ?? '0' }}">
                                 {{ $servico->nome }}
                             </option>
                         @endforeach
@@ -178,6 +182,49 @@
                             <option value="1">1 - Não Retido</option>
                             <option value="2">2 - Retido pelo Tomador</option>
                             <option value="3">3 - Retido pelo Intermediário</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4 mt-4 border-t border-gray-200 pt-4">
+                    <div class="md:col-span-2">
+                        <h4 class="text-sm font-bold text-indigo-800 mb-2">IBS/CBS (Reforma)</h4>
+                        <p class="text-xs text-gray-500 mb-3">Preenchidos automaticamente pelo serviço; ajuste se necessário.</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">cIndOp</label>
+                        <select name="c_ind_op" id="c_ind_op" class="w-full rounded-md border-gray-300 shadow-sm">
+                            <option value="">— usar padrão do serviço —</option>
+                            @foreach($indOps as $indOp)
+                                <option value="{{ $indOp->codigo }}" {{ old('c_ind_op') == $indOp->codigo ? 'selected' : '' }}>
+                                    {{ $indOp->codigo }} — {{ \Illuminate\Support\Str::limit($indOp->descricao, 60) }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">CST / cClassTrib</label>
+                        <select id="nota_class_trib_pair" class="w-full rounded-md border-gray-300 shadow-sm"
+                                onchange="const p=this.value.split('|'); document.getElementById('cst_ibscbs').value=p[0]||''; document.getElementById('c_class_trib').value=p[1]||'';">
+                            <option value="">— usar padrão do serviço —</option>
+                            @foreach($classTribs as $ct)
+                                @php $pair = $ct->cst.'|'.$ct->c_class_trib; @endphp
+                                <option value="{{ $pair }}" {{ old('cst_ibscbs') === $ct->cst && old('c_class_trib') === $ct->c_class_trib ? 'selected' : '' }}>
+                                    {{ $ct->cst }}/{{ $ct->c_class_trib }} — {{ \Illuminate\Support\Str::limit($ct->descricao, 50) }}
+                                </option>
+                            @endforeach
+                        </select>
+                        <input type="hidden" name="cst_ibscbs" id="cst_ibscbs" value="{{ old('cst_ibscbs') }}">
+                        <input type="hidden" name="c_class_trib" id="c_class_trib" value="{{ old('c_class_trib') }}">
+                        <input type="hidden" name="fin_nfse" id="fin_nfse" value="{{ old('fin_nfse', '0') }}">
+                        <input type="hidden" name="ind_dest" value="0">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Consumo pessoal (indFinal)</label>
+                        <select name="ind_final" id="ind_final" class="w-full rounded-md border-gray-300 shadow-sm">
+                            <option value="">— automático (CPF=sim / CNPJ=não) —</option>
+                            <option value="0" {{ old('ind_final') === '0' ? 'selected' : '' }}>0 - Não</option>
+                            <option value="1" {{ old('ind_final') === '1' ? 'selected' : '' }}>1 - Sim</option>
                         </select>
                     </div>
                 </div>
@@ -359,6 +406,21 @@
                     // Preenche Descrição Inteligente
                     const templateDescricao = opt.getAttribute('data-descricao');
                     descricaoInput.value = processarDescricao(templateDescricao);
+
+                    const cIndOp = opt.getAttribute('data-c-ind-op') || '';
+                    const cst = opt.getAttribute('data-cst') || '';
+                    const cClass = opt.getAttribute('data-c-class-trib') || '';
+                    const fin = opt.getAttribute('data-fin-nfse') || '0';
+                    const cIndEl = document.getElementById('c_ind_op');
+                    if (cIndEl && cIndOp) cIndEl.value = cIndOp;
+                    const cstEl = document.getElementById('cst_ibscbs');
+                    const classEl = document.getElementById('c_class_trib');
+                    const pairEl = document.getElementById('nota_class_trib_pair');
+                    if (cstEl) cstEl.value = cst;
+                    if (classEl) classEl.value = cClass;
+                    if (pairEl && cst && cClass) pairEl.value = cst + '|' + cClass;
+                    const finEl = document.getElementById('fin_nfse');
+                    if (finEl) finEl.value = fin;
                 }
             });
 

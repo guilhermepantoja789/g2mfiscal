@@ -33,6 +33,11 @@ class DatabaseSeeder extends Seeder
         // Vincula
         $user->empresas()->attach([$empresa->id]);
 
+        $this->call([
+            TributacaoNacionalSeeder::class,
+            IbscbsCatalogSeeder::class,
+        ]);
+
         // 3. Criar 15 Clientes para esta empresa
         $clientes = \App\Models\Cliente::factory(15)->create([
             'empresa_id' => $empresa->id

@@ -16,6 +16,7 @@ use App\Models\Servico;
 use App\Services\Fiscal\RawNativeNfceIssuer;
 use App\Services\NfseAmbiente;
 use App\Services\NfseDpsNumero;
+use App\Services\NfseIbscbsBuilder;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use RuntimeException;
@@ -443,6 +444,11 @@ class DocumentoOrchestrator
                 'trib_issqn' => '1',
                 'tp_ret_issqn' => '1',
                 'aliquota_iss' => 0,
+                'fin_nfse' => $servico->fin_nfse ?: NfseIbscbsBuilder::DEFAULT_FIN_NFSE,
+                'c_ind_op' => $servico->c_ind_op ?: NfseIbscbsBuilder::DEFAULT_C_IND_OP,
+                'cst_ibscbs' => $servico->cst_ibscbs ?: NfseIbscbsBuilder::DEFAULT_CST,
+                'c_class_trib' => $servico->c_class_trib ?: NfseIbscbsBuilder::DEFAULT_C_CLASS_TRIB,
+                'ind_dest' => NfseIbscbsBuilder::DEFAULT_IND_DEST,
             ]);
 
             $documento->update([
