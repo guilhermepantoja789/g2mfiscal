@@ -82,7 +82,7 @@ class EmpresaController extends Controller
         $this->authorizeAdminDaEmpresa($empresa);
 
         // Carrega o relacionamento
-        $empresa->load('certificado', 'users');
+        $empresa->load('certificado');
 
         // Extrai o certificado para passar como variável independente para a view
         $certificado = $empresa->certificado;
@@ -180,25 +180,6 @@ class EmpresaController extends Controller
                 ? ($empresa->nfce_contingencia ? $empresa->nfce_contingencia_desde : now())
                 : null,
         ]);
-
-        if ($request->has('modulo_erp') || $request->has('modulo_pdv') || $request->has('modulo_financeiro_gerencial') || $request->has('modulo_contabil')) {
-            $empresa->definirModulo(
-                \App\Models\EmpresaModulo::MODULO_ERP,
-                $request->boolean('modulo_erp')
-            );
-            $empresa->definirModulo(
-                \App\Models\EmpresaModulo::MODULO_PDV,
-                $request->boolean('modulo_pdv')
-            );
-            $empresa->definirModulo(
-                \App\Models\EmpresaModulo::MODULO_FINANCEIRO_GERENCIAL,
-                $request->boolean('modulo_financeiro_gerencial')
-            );
-            $empresa->definirModulo(
-                \App\Models\EmpresaModulo::MODULO_CONTABIL,
-                $request->boolean('modulo_contabil')
-            );
-        }
 
         $mensagem = 'Empresa atualizada com sucesso!';
 

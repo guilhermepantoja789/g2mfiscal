@@ -15,7 +15,7 @@
             @if(!empty($isPlatformAdmin))
                 <a href="{{ route('admin.vinculos.index') }}"
                    class="text-sm text-indigo-700 hover:text-indigo-900 font-medium">
-                    Vínculos
+                    Empresas
                 </a>
             @endif
             <form method="POST" action="{{ route('logout') }}">

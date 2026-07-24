@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\EmpresaPerfil;
 use App\Models\Empresa;
+use App\Models\EmpresaModulo;
 use App\Models\User;
 use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
@@ -24,6 +25,7 @@ class PlatformAdminAclTest extends TestCase
         $response->assertOk();
         $response->assertSee($empresa->razao_social);
         $response->assertSee('Visão plataforma');
+        $response->assertSee('Empresas');
     }
 
     public function test_platform_admin_entra_sem_membership(): void
@@ -41,17 +43,18 @@ class PlatformAdminAclTest extends TestCase
         $this->assertEquals($empresa->id, session('empresa_ativa'));
     }
 
-    public function test_equipe_rejeita_promover_admin(): void
+    public function test_vinculos_rejeita_promover_admin(): void
     {
+        $platform = User::factory()->create();
+        $platform->forceFill(['is_platform_admin' => true])->save();
         [$admin, $empresa] = $this->makeAdminEmpresa();
-        $operador = User::factory()->create(['email' => 'op@example.com']);
+        $operador = User::factory()->create();
 
-        $response = $this->actingAs($admin)
-            ->withSession(['empresa_ativa' => $empresa->id])
-            ->post(route('equipe.store'), [
-                'email' => 'op@example.com',
-                'perfil' => EmpresaPerfil::Admin->value,
-            ]);
+        $response = $this->actingAs($platform)->post(route('admin.vinculos.store'), [
+            'user_id' => $operador->id,
+            'empresa_id' => $empresa->id,
+            'perfil' => EmpresaPerfil::Admin->value,
+        ]);
 
         $response->assertSessionHasErrors('perfil');
         $this->assertDatabaseMissing('empresa_user', [
@@ -60,22 +63,22 @@ class PlatformAdminAclTest extends TestCase
         ]);
     }
 
-    public function test_equipe_nao_demove_nem_remove_admin(): void
+    public function test_vinculos_nao_demove_nem_remove_admin(): void
     {
+        $platform = User::factory()->create();
+        $platform->forceFill(['is_platform_admin' => true])->save();
         [$admin, $empresa] = $this->makeAdminEmpresa();
         $outroAdmin = User::factory()->create();
         $outroAdmin->empresas()->attach($empresa->id, ['perfil' => EmpresaPerfil::Admin->value]);
 
-        $demote = $this->actingAs($admin)
-            ->withSession(['empresa_ativa' => $empresa->id])
-            ->put(route('equipe.updateRole', $outroAdmin->id), [
+        $demote = $this->actingAs($platform)
+            ->put(route('admin.vinculos.update', [$empresa, $outroAdmin]), [
                 'perfil' => EmpresaPerfil::Operador->value,
             ]);
         $demote->assertSessionHasErrors('erro');
 
-        $remove = $this->actingAs($admin)
-            ->withSession(['empresa_ativa' => $empresa->id])
-            ->delete(route('equipe.destroy', $outroAdmin->id));
+        $remove = $this->actingAs($platform)
+            ->delete(route('admin.vinculos.destroy', [$empresa, $outroAdmin]));
         $remove->assertSessionHasErrors('erro');
 
         $this->assertDatabaseHas('empresa_user', [
@@ -100,7 +103,21 @@ class PlatformAdminAclTest extends TestCase
         $response->assertForbidden();
     }
 
-    public function test_vinculos_platform_attach_operador(): void
+    public function test_configuracao_nao_exibe_modulos_nem_equipe(): void
+    {
+        [$admin, $empresa] = $this->makeAdminEmpresa();
+
+        $response = $this->actingAs($admin)
+            ->withSession(['empresa_ativa' => $empresa->id])
+            ->get(route('empresas.configuracao', $empresa));
+
+        $response->assertOk();
+        $response->assertDontSee('Módulos da empresa');
+        $response->assertDontSee('Adicionar Membro Existente');
+        $response->assertSee('Certificado Digital');
+    }
+
+    public function test_vinculos_platform_attach_operador_e_modulos(): void
     {
         $dono = User::factory()->create();
         $platform = User::factory()->create();
@@ -115,6 +132,8 @@ class PlatformAdminAclTest extends TestCase
 
         $ok = $this->actingAs($platform)->get(route('admin.vinculos.index'));
         $ok->assertOk();
+        $ok->assertSee('Empresas (plataforma)');
+        $ok->assertSee('Módulos');
 
         $store = $this->actingAs($platform)->post(route('admin.vinculos.store'), [
             'user_id' => $alvo->id,
@@ -127,6 +146,24 @@ class PlatformAdminAclTest extends TestCase
             'user_id' => $alvo->id,
             'perfil' => 'operador',
         ]);
+
+        $modulos = $this->actingAs($platform)->put(route('admin.vinculos.modulos', $empresa), [
+            'modulo_erp' => 0,
+            'modulo_pdv' => 0,
+            'modulo_financeiro_gerencial' => 1,
+            'modulo_contabil' => 1,
+        ]);
+        $modulos->assertRedirect();
+        $this->assertFalse($empresa->fresh()->temModulo(EmpresaModulo::MODULO_ERP));
+        $this->assertFalse($empresa->fresh()->temModulo(EmpresaModulo::MODULO_PDV));
+        $this->assertTrue($empresa->fresh()->temModulo(EmpresaModulo::MODULO_FINANCEIRO_GERENCIAL));
+        $this->assertTrue($empresa->fresh()->temModulo(EmpresaModulo::MODULO_CONTABIL));
+
+        $busca = $this->actingAs($platform)->get(route('admin.vinculos.index', [
+            'q' => $empresa->razao_social,
+        ]));
+        $busca->assertOk();
+        $busca->assertSee($empresa->razao_social);
     }
 
     public function test_artisan_platform_admin_e_attach_empresa(): void

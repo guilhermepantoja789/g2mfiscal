@@ -124,7 +124,7 @@ class EmpresaNavBuilder
 
         $groups[] = [
             'id' => 'fiscal_servicos',
-            'label' => 'Fiscal — Serviços',
+                'label' => 'Fiscal — NFS-e',
             'icon' => 'document-text',
             'mobile_primary' => true,
             'active' => request()->routeIs('notas.*', 'servicos.*', 'recorrencias.*', 'clientes.*', 'cobrancas.*', 'carteira.*'),
@@ -142,7 +142,7 @@ class EmpresaNavBuilder
 
         $groups[] = [
             'id' => 'fiscal_produtos',
-            'label' => 'Fiscal — Produtos',
+                'label' => 'Fiscal — NFC-e',
             'icon' => 'receipt',
             'mobile_primary' => ! $temErp,
             'active' => request()->routeIs('nfces.*'),
@@ -197,8 +197,8 @@ class EmpresaNavBuilder
         if ($ehPlatform) {
             $utility[] = [
                 'id' => 'vinculos',
-                'label' => 'Vínculos',
-                'icon' => 'users',
+                'label' => 'Empresas',
+                'icon' => 'building-office',
                 'href' => route('admin.vinculos.index'),
                 'active' => request()->routeIs('admin.vinculos.*'),
             ];

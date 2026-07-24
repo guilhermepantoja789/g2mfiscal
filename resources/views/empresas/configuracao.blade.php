@@ -3,7 +3,7 @@
     <div class="mb-6 flex justify-between items-center">
         <div>
             <h2 class="text-2xl font-bold text-gray-800">Configurações da Empresa</h2>
-            <p class="text-gray-500 text-sm">Gerencie dados cadastrais, fiscais e equipe.</p>
+            <p class="text-gray-500 text-sm">Gerencie dados cadastrais, fiscais e certificado.</p>
         </div>
         <button type="submit" form="formConfig" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded shadow flex items-center">
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
@@ -216,50 +216,6 @@
                         </div>
                     </div>
 
-                    <div class="md:col-span-2 border-t pt-4 mt-2 space-y-3">
-                        <h4 class="text-md font-semibold text-gray-900">Módulos da empresa</h4>
-                        <p class="text-sm text-gray-500">ERP/PDV/Financeiro: opt-out (desmarcado = desabilitado). Contábil: opt-in (marcado = habilitado). Fiscal avulso permanece disponível.</p>
-                        <label class="flex items-start gap-3">
-                            <input type="hidden" name="modulo_erp" value="0">
-                            <input type="checkbox" name="modulo_erp" value="1"
-                                   @checked(old('modulo_erp', $empresa->temModulo(\App\Models\EmpresaModulo::MODULO_ERP)))
-                                   class="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                            <span>
-                                <span class="block text-sm font-semibold text-gray-900">ERP / Vendas</span>
-                                <span class="block text-xs text-gray-500">Documentos, produtos, estoque e fornecedores.</span>
-                            </span>
-                        </label>
-                        <label class="flex items-start gap-3">
-                            <input type="hidden" name="modulo_pdv" value="0">
-                            <input type="checkbox" name="modulo_pdv" value="1"
-                                   @checked(old('modulo_pdv', $empresa->temModulo(\App\Models\EmpresaModulo::MODULO_PDV)))
-                                   class="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                            <span>
-                                <span class="block text-sm font-semibold text-gray-900">PDV</span>
-                                <span class="block text-xs text-gray-500">Tela de venda rápida com NFC-e (requer ERP).</span>
-                            </span>
-                        </label>
-                        <label class="flex items-start gap-3">
-                            <input type="hidden" name="modulo_financeiro_gerencial" value="0">
-                            <input type="checkbox" name="modulo_financeiro_gerencial" value="1"
-                                   @checked(old('modulo_financeiro_gerencial', $empresa->temModulo(\App\Models\EmpresaModulo::MODULO_FINANCEIRO_GERENCIAL)))
-                                   class="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                            <span>
-                                <span class="block text-sm font-semibold text-gray-900">Financeiro gerencial</span>
-                                <span class="block text-xs text-gray-500">Lançamentos P/R e formas de pagamento (sem gateway).</span>
-                            </span>
-                        </label>
-                        <label class="flex items-start gap-3">
-                            <input type="hidden" name="modulo_contabil" value="0">
-                            <input type="checkbox" name="modulo_contabil" value="1"
-                                   @checked(old('modulo_contabil', $empresa->temModulo(\App\Models\EmpresaModulo::MODULO_CONTABIL)))
-                                   class="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                            <span>
-                                <span class="block text-sm font-semibold text-gray-900">Área Contábil</span>
-                                <span class="block text-xs text-gray-500">Hub fiscal para contador (livros, XMLs, exportações). Opt-in.</span>
-                            </span>
-                        </label>
-                    </div>
                 </form>
             </div>
         </div>
@@ -330,87 +286,6 @@
                         Salvar Certificado
                     </button>
                 </form>
-            </div>
-
-            <div class="bg-white shadow rounded-lg p-6">
-                <h3 class="text-lg font-medium text-gray-900 border-b pb-2 mb-4">Equipe</h3>
-
-                <div class="bg-gray-50 p-4 rounded-md mb-6 border border-gray-200">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Adicionar Membro Existente</label>
-                    <form action="{{ route('equipe.store') }}" method="POST" class="flex gap-2">
-                        @csrf
-                        <input type="email" name="email" required
-                               placeholder="Digite o e-mail do usuário cadastrado..."
-                               class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
-                        <select name="perfil"
-                                class="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
-                            <option value="operador">Operador</option>
-                            <option value="contador">Contador</option>
-                        </select>
-
-                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm flex items-center">
-                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-                            Adicionar
-                        </button>
-                    </form>
-                    <p class="text-xs text-gray-500 mt-2">
-                        * Apenas operador ou contador. Admins de empresa são imutáveis (criação da empresa ou Artisan). Contador acessa a Área Contábil em modo leitura fiscal.
-                    </p>
-                </div>
-
-                <ul class="space-y-4">
-                    @forelse($empresa->users as $user)
-                        @php
-                            $perfilMembro = \App\Enums\EmpresaPerfil::tryFrom((string) $user->pivot->perfil);
-                            $ehAdminMembro = $perfilMembro === \App\Enums\EmpresaPerfil::Admin;
-                        @endphp
-                        <li class="flex justify-between items-center text-sm border-b border-gray-100 pb-2 last:border-0">
-                            <div class="flex items-center">
-                                <div class="h-10 w-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold mr-3 border border-blue-200">
-                                    {{ strtoupper(substr($user->name, 0, 2)) }}
-                                </div>
-                                <div>
-                                    <p class="font-medium text-gray-900">{{ $user->name }}</p>
-                                    <p class="text-gray-500 text-xs">{{ $user->email }}</p>
-                                </div>
-                            </div>
-
-                            <div class="flex items-center space-x-3">
-                                @if($ehAdminMembro || auth()->id() === $user->id)
-                                    <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-bold uppercase">
-                                        {{ $perfilMembro?->label() ?? $user->pivot->perfil }}
-                                        @if($ehAdminMembro) — imutável @endif
-                                        @if(auth()->id() === $user->id) (Você) @endif
-                                    </span>
-                                @else
-                                    <form action="{{ route('equipe.updateRole', $user->id) }}" method="POST" class="flex items-center">
-                                        @csrf
-                                        @method('PUT')
-                                        <select name="perfil" onchange="this.form.submit()"
-                                                class="text-xs border-gray-300 rounded-l-md focus:ring-blue-500 focus:border-blue-500 py-1 pl-2 pr-6 bg-gray-50">
-                                            <option value="operador" {{ $user->pivot->perfil == 'operador' ? 'selected' : '' }}>Operador</option>
-                                            <option value="contador" {{ $user->pivot->perfil == 'contador' ? 'selected' : '' }}>Contador</option>
-                                        </select>
-                                        <div class="bg-gray-200 border border-l-0 border-gray-300 rounded-r-md px-2 py-1">
-                                            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                                        </div>
-                                    </form>
-
-                                    <form action="{{ route('equipe.destroy', $user->id) }}" method="POST"
-                                          onsubmit="return confirm('Remover este membro da equipe?')">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="text-xs text-red-600 hover:text-red-800 font-medium">
-                                            Remover
-                                        </button>
-                                    </form>
-                                @endif
-                            </div>
-                        </li>
-                    @empty
-                        <li class="text-gray-500 text-center py-4">Nenhum membro na equipe além de você.</li>
-                    @endforelse
-                </ul>
             </div>
 
         </div>

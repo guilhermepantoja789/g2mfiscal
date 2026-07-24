@@ -11,8 +11,8 @@ Status do produto e próximos passos: [`PLANO.md`](PLANO.md).
 ### Multi-empresa e cadastros
 - Várias empresas por usuário, com sessão `empresa_ativa`
 - Clientes, fornecedores, serviços, produtos (NCM/CFOP/CSOSN/EAN)
-- Equipe com perfis (`admin` / `operador` / `contador`); admins de empresa são **imutáveis** na UI (só operador/contador)
-- Admin de **plataforma** (`users.is_platform_admin`): vê todas as empresas e gerencia vínculos em `/app/admin/vinculos` — flag **somente via Artisan** (sem UI/seeder)
+- Equipe/vínculos e módulos da empresa são geridos **somente** pelo admin de plataforma em `/app/admin/vinculos` (operador/contador; admins de empresa imutáveis na UI)
+- Admin de **plataforma** (`users.is_platform_admin`): vê todas as empresas e gerencia módulos + vínculos em `/app/admin/vinculos` — flag **somente via Artisan** (sem UI/seeder)
 - Certificado digital A1 (OpenSSL 3 + fallback legado)
 
 ### Fiscal
@@ -139,7 +139,7 @@ Por padrão o ERP está habilitado para a empresa (sem linha em `empresa_modulos
 
 ### Admin de plataforma
 ```bash
-# Concede visão de todas as empresas + /app/admin/vinculos
+# Concede visão de todas as empresas + gestão em /app/admin/vinculos
 php artisan user:platform-admin email@exemplo.com
 php artisan user:platform-admin email@exemplo.com --revoke
 
@@ -163,7 +163,7 @@ Criação de login sem vínculo: `php artisan create:user`.
 | `/app/estoque` | Saldos e Kardex |
 | `/app/financeiro/lancamentos` | Contas a pagar/receber |
 | `/app/contabil` | Hub contábil (opt-in) |
-| `/app/admin/vinculos` | Vínculos usuário/empresa (só platform admin) |
+| `/app/admin/vinculos` | Empresas (plataforma): módulos + vínculos (só platform admin) |
 | `/app/notas`, `/app/nfces` | Emissão avulsa / lab (legado) |
 
 ## Testes

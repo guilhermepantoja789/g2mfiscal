@@ -11,17 +11,18 @@ use Tests\TestCase;
 
 class ContabilAreaTest extends TestCase
 {
-    public function test_admin_pode_convidar_contador(): void
+    public function test_platform_pode_vincular_contador(): void
     {
         [$admin, $empresa] = $this->makeAdminEmpresa();
+        $platform = User::factory()->create();
+        $platform->forceFill(['is_platform_admin' => true])->save();
         $contador = User::factory()->create(['email' => 'contador@example.com']);
 
-        $response = $this->actingAs($admin)
-            ->withSession(['empresa_ativa' => $empresa->id])
-            ->post(route('equipe.store'), [
-                'email' => 'contador@example.com',
-                'perfil' => EmpresaPerfil::Contador->value,
-            ]);
+        $response = $this->actingAs($platform)->post(route('admin.vinculos.store'), [
+            'user_id' => $contador->id,
+            'empresa_id' => $empresa->id,
+            'perfil' => EmpresaPerfil::Contador->value,
+        ]);
 
         $response->assertRedirect();
         $this->assertDatabaseHas('empresa_user', [

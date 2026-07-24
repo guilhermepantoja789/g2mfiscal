@@ -18,7 +18,6 @@ use App\Http\Controllers\LancamentoFinanceiroController;
 use App\Http\Controllers\NotaFiscalController;
 use App\Http\Controllers\NfceController;
 use App\Http\Controllers\ClienteController;
-use App\Http\Controllers\EquipeController;
 use App\Http\Controllers\PdvController;
 use App\Http\Controllers\ProdutoController;
 use App\Http\Controllers\ServicoController;
@@ -46,6 +45,7 @@ Route::middleware(['auth', 'verified'])->prefix('app')->group(function () {
     Route::middleware('plataforma.admin')->prefix('admin')->name('admin.')->group(function () {
         Route::get('/vinculos', [\App\Http\Controllers\Admin\VinculosController::class, 'index'])->name('vinculos.index');
         Route::post('/vinculos', [\App\Http\Controllers\Admin\VinculosController::class, 'store'])->name('vinculos.store');
+        Route::put('/vinculos/{empresa}/modulos', [\App\Http\Controllers\Admin\VinculosController::class, 'updateModulos'])->name('vinculos.modulos');
         Route::put('/vinculos/{empresa}/{user}', [\App\Http\Controllers\Admin\VinculosController::class, 'update'])->name('vinculos.update');
         Route::delete('/vinculos/{empresa}/{user}', [\App\Http\Controllers\Admin\VinculosController::class, 'destroy'])->name('vinculos.destroy');
     });
@@ -188,7 +188,7 @@ Route::middleware(['auth', 'verified'])->prefix('app')->group(function () {
                 });
             });
 
-        // --- ADMIN: config, equipe, certificado, CRUD empresa ---
+        // --- ADMIN: config, certificado, CRUD empresa ---
         Route::middleware('empresa.perfil:admin')->group(function () {
             Route::get('/empresas/{empresa}/configuracao', [EmpresaController::class, 'configuracao'])->name('empresas.configuracao');
             Route::get('/empresas/{empresa}/edit', [EmpresaController::class, 'edit'])->name('empresas.edit');
@@ -196,9 +196,6 @@ Route::middleware(['auth', 'verified'])->prefix('app')->group(function () {
             Route::patch('/empresas/{empresa}', [EmpresaController::class, 'update']);
             Route::delete('/empresas/{empresa}', [EmpresaController::class, 'destroy'])->name('empresas.destroy');
 
-            Route::post('/equipe/adicionar', [EquipeController::class, 'store'])->name('equipe.store');
-            Route::delete('/equipe/{userId}', [EquipeController::class, 'destroy'])->name('equipe.destroy');
-            Route::put('/equipe/{userId}/perfil', [EquipeController::class, 'updateRole'])->name('equipe.updateRole');
             Route::post('/certificados', [CertificadoController::class, 'store'])->name('certificados.store');
             Route::post('/empresas/buscar-im-certificado', [EmpresaController::class, 'buscarImComCertificado'])->name('empresas.buscar_im_certificado');
         });

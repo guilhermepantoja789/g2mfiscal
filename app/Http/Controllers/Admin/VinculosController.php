@@ -5,24 +5,67 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\EmpresaPerfil;
 use App\Http\Controllers\Controller;
 use App\Models\Empresa;
+use App\Models\EmpresaModulo;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class VinculosController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $empresas = Empresa::query()
-            ->with(['users' => fn ($q) => $q->orderBy('name')])
+        $q = trim((string) $request->query('q', ''));
+
+        $empresasQuery = Empresa::query()
+            ->with([
+                'users' => fn ($rel) => $rel->orderBy('name'),
+                'modulos',
+            ])
+            ->orderBy('razao_social');
+
+        if ($q !== '') {
+            $digits = preg_replace('/\D+/', '', $q) ?: null;
+            $empresasQuery->where(function ($builder) use ($q, $digits) {
+                $builder
+                    ->where('razao_social', 'like', "%{$q}%")
+                    ->orWhere('nome_fantasia', 'like', "%{$q}%");
+                if ($digits) {
+                    $builder->orWhere('cnpj', 'like', "%{$digits}%");
+                }
+            });
+        }
+
+        $empresas = $empresasQuery->get();
+
+        $empresasOpcoes = Empresa::query()
             ->orderBy('razao_social')
-            ->get();
+            ->get(['id', 'razao_social', 'nome_fantasia', 'cnpj']);
 
         $usuarios = User::query()
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'is_platform_admin']);
 
-        return view('admin.vinculos', compact('empresas', 'usuarios'));
+        return view('admin.vinculos', compact('empresas', 'empresasOpcoes', 'usuarios', 'q'));
+    }
+
+    public function updateModulos(Request $request, Empresa $empresa)
+    {
+        $request->validate([
+            'modulo_erp' => ['sometimes', 'boolean'],
+            'modulo_pdv' => ['sometimes', 'boolean'],
+            'modulo_financeiro_gerencial' => ['sometimes', 'boolean'],
+            'modulo_contabil' => ['sometimes', 'boolean'],
+        ]);
+
+        $empresa->definirModulo(EmpresaModulo::MODULO_ERP, $request->boolean('modulo_erp'));
+        $empresa->definirModulo(EmpresaModulo::MODULO_PDV, $request->boolean('modulo_pdv'));
+        $empresa->definirModulo(
+            EmpresaModulo::MODULO_FINANCEIRO_GERENCIAL,
+            $request->boolean('modulo_financeiro_gerencial')
+        );
+        $empresa->definirModulo(EmpresaModulo::MODULO_CONTABIL, $request->boolean('modulo_contabil'));
+
+        return back()->with('success', 'Módulos atualizados.');
     }
 
     public function store(Request $request)

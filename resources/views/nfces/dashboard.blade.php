@@ -13,7 +13,7 @@
                     <ul class="list-disc space-y-1 pl-4 text-sm text-slate-700">
                         <li>Painel de emissão avulsa (sem estoque/financeiro). Para venda completa use o PDV.</li>
                         <li>Acompanhe contingência e pendências de transmissão nos KPIs.</li>
-                        <li>Inutilização de numeração fica em Fiscal → Produtos → Inutilizar.</li>
+                        <li>Inutilização de numeração fica em Fiscal → NFC-e → Inutilizar.</li>
                     </ul>
                 </x-help-panel>
             </x-slot>

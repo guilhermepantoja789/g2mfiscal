@@ -47,9 +47,14 @@ class EmpresaNavBuilderTest extends TestCase
         $this->assertNotEmpty($nav['command_items']);
         $this->assertTrue(collect($nav['utility'])->contains(fn ($u) => $u['id'] === 'config'));
         $this->assertFalse(collect($nav['utility'])->contains(fn ($u) => $u['id'] === 'vinculos'));
+
+        $servicos = collect($nav['groups'])->firstWhere('id', 'fiscal_servicos');
+        $produtos = collect($nav['groups'])->firstWhere('id', 'fiscal_produtos');
+        $this->assertSame('Fiscal — NFS-e', $servicos['label'] ?? null);
+        $this->assertSame('Fiscal — NFC-e', $produtos['label'] ?? null);
     }
 
-    public function test_platform_admin_ve_vinculos_na_utility(): void
+    public function test_platform_admin_ve_empresas_na_utility(): void
     {
         $platform = User::factory()->create();
         $platform->forceFill(['is_platform_admin' => true])->save();
@@ -59,7 +64,9 @@ class EmpresaNavBuilderTest extends TestCase
         session(['empresa_ativa' => $empresa->id]);
 
         $nav = app(EmpresaNavBuilder::class)->build();
-        $this->assertTrue(collect($nav['utility'])->contains(fn ($u) => $u['id'] === 'vinculos'));
+        $item = collect($nav['utility'])->firstWhere('id', 'vinculos');
+        $this->assertNotNull($item);
+        $this->assertSame('Empresas', $item['label']);
     }
 
     public function test_contador_nao_ve_cobrancas_nem_config(): void

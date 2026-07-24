@@ -1,0 +1,49 @@
+---
+description: Never wipe, drop, truncate, or migrate:fresh databases without explicit user approval — including tests
+alwaysApply: true
+---
+
+# Database safety — never wipe without asking
+
+Agents must **never** destroy or empty database data unless the user has **explicitly approved that exact action in the current conversation**.
+
+This applies in **every mode** (Agent, Plan, Ask, Debug, Cloud, subagents) and to **every** target (local, remote, Docker, staging, production, CI, and test DBs that point at real MySQL/Postgres).
+
+## Forbidden without prior explicit approval
+
+Do **not** run or suggest as automatic follow-up:
+
+- `migrate:fresh`, `migrate:refresh`, `db:wipe`, `schema:drop`
+- `DROP DATABASE` / `DROP TABLE` / `TRUNCATE` / `DELETE FROM` without a narrow, approved WHERE
+- Restoring a dump that **overwrites** an existing non-empty database
+- PHPUnit/Pest/`RefreshDatabase`/`DatabaseMigrations` against anything other than an isolated in-memory or dedicated throwaway test DB
+- `php artisan test` / PHPUnit with `--no-configuration` (or any flag that bypasses `phpunit.xml` and can hit `.env` DB)
+- Pointing tests at the same `DB_*` as the app `.env` MySQL/Postgres
+
+## Required defaults for tests
+
+- Keep `phpunit.xml` (or equivalent) on **sqlite `:memory:`** or a clearly named throwaway test database.
+- Before running tests, confirm they will **not** use the application `.env` connection.
+- If unsure which DB a command will hit: **stop and ask**.
+
+## Always ask first
+
+Even if wiping seems “needed” to fix migrations, unblock tests, or restore from dump:
+
+1. State what would be destroyed (host, database name, rough data at risk).
+2. Ask for explicit yes in chat.
+3. Only then run the command.
+
+Restoring from backup is allowed **only** after the user confirms, or when the user already asked to restore that specific dump.
+
+## Examples
+
+```text
+❌ BAD: php artisan migrate:fresh --force
+❌ BAD: php artisan test --no-configuration
+❌ BAD: RefreshDatabase against DB_DATABASE from .env (MySQL)
+
+✅ GOOD: php artisan migrate (additive only)
+✅ GOOD: php artisan test (with phpunit.xml → sqlite :memory:)
+✅ GOOD: ask “Posso restaurar gdois634_g2mfiscal.sql no MySQL X? Isso apaga o estado atual.”
+```
