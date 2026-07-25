@@ -49,6 +49,18 @@
                     <label class="block text-sm font-medium text-gray-700">Juros (%)</label>
                     <input type="number" step="0.01" min="0" name="juros_percentual" value="{{ old('juros_percentual', $forma->juros_percentual ?? 0) }}" class="mt-1 block w-full rounded-md border-gray-300">
                 </div>
+                <div class="md:col-span-2">
+                    <label class="block text-sm font-medium text-gray-700">Conta contábil (débito na venda)</label>
+                    <select name="conta_contabil_id" class="mt-1 block w-full rounded-md border-gray-300">
+                        <option value="">— Usar padrão do plano —</option>
+                        @foreach(($contas ?? []) as $conta)
+                            <option value="{{ $conta->id }}"
+                                    @selected((string) old('conta_contabil_id', $forma->conta_contabil_id ?? '') === (string) $conta->id)>
+                                {{ $conta->codigo }} — {{ $conta->nome }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
             </div>
 
             <div class="flex flex-wrap gap-6 pt-2">

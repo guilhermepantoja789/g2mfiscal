@@ -6,11 +6,67 @@ use App\Models\Cliente;
 use App\Models\DocumentoComercial;
 use App\Models\Empresa;
 use App\Models\Nfce;
+use App\Models\Produto;
 use App\Models\User;
 use Tests\TestCase;
 
 class PdvFluidoTest extends TestCase
 {
+    public function test_busca_produtos_parcial_sku_ean_e_isola_empresa(): void
+    {
+        [$user, $empresa] = $this->makeUserEmpresa();
+        $outra = $this->makeEmpresaFor($user, '98765432000198');
+
+        $agua = $this->makeProduto($empresa, [
+            'descricao' => 'Água mineral 500ml',
+            'sku' => 'AGUA-500',
+            'ean' => '7891000100103',
+            'preco_venda' => 3.5,
+        ]);
+        $this->makeProduto($empresa, [
+            'descricao' => 'Refrigerante cola',
+            'sku' => 'REFRI-350',
+            'ean' => '7891000100999',
+            'preco_venda' => 5,
+        ]);
+        $this->makeProduto($empresa, [
+            'descricao' => 'Água inativa',
+            'sku' => 'AGUA-OFF',
+            'ean' => '7891000100110',
+            'preco_venda' => 1,
+            'ativo' => false,
+        ]);
+        $this->makeProduto($outra, [
+            'descricao' => 'Água outra empresa',
+            'sku' => 'AGUA-OUTRA',
+            'ean' => '7891000100103',
+            'preco_venda' => 9,
+        ]);
+
+        $bySku = $this->actingAs($user)
+            ->withSession(['empresa_ativa' => $empresa->id])
+            ->getJson(route('pdv.produtos', ['q' => 'AGUA']));
+
+        $bySku->assertOk();
+        $this->assertCount(1, $bySku->json());
+        $this->assertSame($agua->id, $bySku->json('0.id'));
+
+        $byEanPartial = $this->actingAs($user)
+            ->withSession(['empresa_ativa' => $empresa->id])
+            ->getJson(route('pdv.produtos', ['q' => '1000100103']));
+
+        $byEanPartial->assertOk();
+        $this->assertCount(1, $byEanPartial->json());
+        $this->assertSame($agua->id, $byEanPartial->json('0.id'));
+
+        $byMaskedEan = $this->actingAs($user)
+            ->withSession(['empresa_ativa' => $empresa->id])
+            ->getJson(route('pdv.produtos', ['q' => '789.1000.1001-03']));
+
+        $byMaskedEan->assertOk();
+        $this->assertCount(1, $byMaskedEan->json());
+        $this->assertSame($agua->id, $byMaskedEan->json('0.id'));
+    }
 
     public function test_busca_clientes_json_filtra_por_empresa_e_termo(): void
     {
@@ -153,5 +209,22 @@ class PdvFluidoTest extends TestCase
         ]);
 
         return $empresa;
+    }
+
+    /**
+     * @param  array<string, mixed>  $attrs
+     */
+    private function makeProduto(Empresa $empresa, array $attrs): Produto
+    {
+        return Produto::create(array_merge([
+            'empresa_id' => $empresa->id,
+            'ncm' => '22011000',
+            'cfop' => '5102',
+            'csosn' => '102',
+            'unidade' => 'UN',
+            'estoque_atual' => 10,
+            'controla_estoque' => true,
+            'ativo' => true,
+        ], $attrs));
     }
 }

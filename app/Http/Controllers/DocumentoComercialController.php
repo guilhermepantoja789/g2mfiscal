@@ -106,6 +106,10 @@ class DocumentoComercialController extends Controller
             'fornecedor_id' => 'nullable|integer',
             'forma_pagamento_id' => 'nullable|integer',
             'forma_pagamento' => 'nullable|string|max:10',
+            'pagamentos' => 'nullable|array|min:1',
+            'pagamentos.*.forma_pagamento_id' => 'required_with:pagamentos|integer',
+            'pagamentos.*.valor' => 'required_with:pagamentos|numeric|min:0.01',
+            'pagamentos.*.v_troco' => 'nullable|numeric|min:0',
             'vencimento' => 'nullable|date',
             'pago_avista' => 'nullable|boolean',
             'observacoes' => 'nullable|string',
@@ -142,9 +146,11 @@ class DocumentoComercialController extends Controller
             'itens.servico',
             'cliente',
             'fornecedor',
+            'formaPagamentoRel',
+            'pagamentos.formaPagamento',
             'notaFiscal',
             'nfce',
-            'lancamentosFinanceiros',
+            'lancamentosFinanceiros.formaPagamento',
             'movimentacoesEstoque.produto',
         ]);
 

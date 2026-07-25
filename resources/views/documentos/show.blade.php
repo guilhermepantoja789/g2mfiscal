@@ -36,7 +36,24 @@
                 <h3 class="font-bold text-gray-800">Resumo</h3>
                 <p class="text-sm">Parceiro: <strong>{{ $documento->cliente?->razao_social ?? $documento->fornecedor?->razao_social ?? '-' }}</strong></p>
                 <p class="text-sm">Total: <strong>R$ {{ number_format($documento->valor_total, 2, ',', '.') }}</strong></p>
-                <p class="text-sm">Pagamento: {{ $documento->forma_pagamento ?? '-' }} {{ $documento->pago_avista ? '(à vista)' : '' }}</p>
+                @if($documento->pagamentos->isNotEmpty())
+                    <div class="text-sm space-y-1">
+                        <p class="font-medium text-gray-700">Pagamentos:</p>
+                        <ul class="list-disc pl-4 text-gray-600">
+                            @foreach($documento->pagamentos as $pag)
+                                <li>
+                                    {{ $pag->formaPagamento?->nome ?? $pag->forma_pagamento_id }}
+                                    — R$ {{ number_format($pag->valor, 2, ',', '.') }}
+                                    @if($pag->v_troco)
+                                        <span class="text-xs text-gray-400">(troco R$ {{ number_format($pag->v_troco, 2, ',', '.') }})</span>
+                                    @endif
+                                </li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @else
+                    <p class="text-sm">Pagamento: {{ $documento->formaPagamentoRel?->nome ?? ($documento->forma_pagamento ?? '-') }} {{ $documento->pago_avista ? '(à vista)' : '' }}</p>
+                @endif
                 @if($documento->chave_nfe)
                     <p class="text-sm font-mono break-all">Chave: {{ $documento->chave_nfe }}</p>
                 @endif

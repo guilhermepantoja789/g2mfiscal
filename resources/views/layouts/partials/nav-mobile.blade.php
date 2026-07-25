@@ -7,6 +7,7 @@
 
 <nav
     data-spotlight="nav-mobile"
+    x-show="!$store.pdv.opera"
     class="fixed inset-x-0 bottom-0 z-30 md:hidden border-t border-slate-200 bg-white/95 backdrop-blur pb-[env(safe-area-inset-bottom)]"
     aria-label="Navegação principal"
 >

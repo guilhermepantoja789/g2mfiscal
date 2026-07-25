@@ -4,7 +4,7 @@
 @endphp
 
 <aside
-    x-show="activeGroup"
+    x-show="activeGroup && !$store.pdv.opera"
     x-cloak
     x-transition:enter="transition ease-out duration-150"
     x-transition:enter-start="opacity-0 -translate-x-2"

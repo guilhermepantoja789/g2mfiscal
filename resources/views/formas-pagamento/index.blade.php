@@ -20,6 +20,7 @@
                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Código (tPag)</th>
                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Liquidação</th>
                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parcelas / Juros</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Conta</th>
                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
                 </tr>
@@ -41,6 +42,9 @@
                                 · {{ number_format($forma->juros_percentual, 2, ',', '.') }}%
                             @endif
                         </td>
+                        <td class="px-4 py-3 text-sm text-gray-600 font-mono">
+                            {{ $forma->contaContabil?->codigo ?? '—' }}
+                        </td>
                         <td class="px-4 py-3 text-sm">
                             @if($forma->ativo)
                                 <span class="text-emerald-700 font-medium">Ativa</span>
@@ -57,7 +61,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Nenhuma forma cadastrada.</td></tr>
+                    <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Nenhuma forma cadastrada.</td></tr>
                 @endforelse
                 </tbody>
             </table>

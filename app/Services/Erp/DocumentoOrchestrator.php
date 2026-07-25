@@ -7,6 +7,7 @@ use App\Jobs\EmitirNotaFiscalJob;
 use App\Models\Cliente;
 use App\Models\DocumentoComercial;
 use App\Models\DocumentoItem;
+use App\Models\DocumentoPagamento;
 use App\Models\Empresa;
 use App\Models\FormaPagamento;
 use App\Models\Nfce;
@@ -40,6 +41,7 @@ class DocumentoOrchestrator
      *   fornecedor_id?: int|null,
      *   forma_pagamento?: string|null,
      *   forma_pagamento_id?: int|null,
+     *   pagamentos?: list<array{forma_pagamento_id: int, valor?: float|string, v_troco?: float|string|null}>,
      *   vencimento?: string|null,
      *   pago_avista?: bool,
      *   observacoes?: string|null,
@@ -57,7 +59,7 @@ class DocumentoOrchestrator
     {
         return DB::transaction(function () use ($empresa, $dados) {
             $this->validarCanalItens($dados['canal_fiscal'], $dados['itens'] ?? []);
-            $pagamento = $this->resolverPagamento($empresa, $dados);
+            $pagamento = $this->resolverPagamentoPrincipal($empresa, $dados);
 
             $doc = DocumentoComercial::create([
                 'empresa_id' => $empresa->id,
@@ -81,10 +83,11 @@ class DocumentoOrchestrator
 
             $total = $this->sincronizarItens($doc, $dados['itens']);
             $doc->update(['valor_total' => $total]);
+            $this->sincronizarPagamentos($doc, $empresa, $dados, $total);
 
             $this->rememberNfceDest($doc->id, $dados);
 
-            return $doc->fresh(['itens', 'cliente', 'fornecedor', 'formaPagamentoRel']);
+            return $doc->fresh(['itens', 'cliente', 'fornecedor', 'formaPagamentoRel', 'pagamentos.formaPagamento']);
         });
     }
 
@@ -102,9 +105,14 @@ class DocumentoOrchestrator
                 $this->validarCanalItens($documento->canal_fiscal, $dados['itens']);
             }
 
+            $empresa = $documento->empresa ?? Empresa::findOrFail($documento->empresa_id);
+            $temPagamentos = array_key_exists('pagamentos', $dados)
+                || array_key_exists('forma_pagamento_id', $dados)
+                || array_key_exists('forma_pagamento', $dados);
+
             $pagamento = null;
-            if (array_key_exists('forma_pagamento_id', $dados) || array_key_exists('forma_pagamento', $dados)) {
-                $pagamento = $this->resolverPagamento($documento->empresa, $dados);
+            if ($temPagamentos) {
+                $pagamento = $this->resolverPagamentoPrincipal($empresa, $dados);
             }
 
             $documento->update([
@@ -135,7 +143,16 @@ class DocumentoOrchestrator
                 $documento->update(['valor_total' => $total]);
             }
 
-            return $documento->fresh(['itens', 'cliente', 'fornecedor', 'formaPagamentoRel']);
+            if ($temPagamentos) {
+                $this->sincronizarPagamentos(
+                    $documento->fresh(),
+                    $empresa,
+                    $dados,
+                    (float) $documento->fresh()->valor_total
+                );
+            }
+
+            return $documento->fresh(['itens', 'cliente', 'fornecedor', 'formaPagamentoRel', 'pagamentos.formaPagamento']);
         });
     }
 
@@ -261,7 +278,7 @@ class DocumentoOrchestrator
      */
     public function montarPayloadNfce(DocumentoComercial $documento, array $opcoes = []): array
     {
-        $documento->loadMissing(['itens', 'cliente']);
+        $documento->loadMissing(['itens', 'cliente', 'pagamentos.formaPagamento']);
 
         $itens = [];
         foreach ($documento->itens as $item) {
@@ -280,17 +297,32 @@ class DocumentoOrchestrator
             ];
         }
 
-        $tPag = $documento->forma_pagamento ?: '01';
-        $total = (float) $documento->valor_total;
+        $pagamentos = [];
+        foreach ($documento->pagamentos as $linha) {
+            $tPag = $linha->formaPagamento?->codigo ?: ($documento->forma_pagamento ?: '01');
+            $pagamentos[] = [
+                't_pag' => $tPag,
+                'v_pag' => (float) $linha->valor,
+                'v_troco' => $tPag === '01' && $linha->v_troco !== null
+                    ? (float) $linha->v_troco
+                    : null,
+            ];
+        }
+
+        if ($pagamentos === []) {
+            $tPag = $documento->forma_pagamento ?: '01';
+            $pagamentos[] = [
+                't_pag' => $tPag,
+                'v_pag' => (float) $documento->valor_total,
+                'v_troco' => null,
+            ];
+        }
+
         [$destDoc, $destNome] = $this->resolverDestNfce($documento, $opcoes);
 
         return [
             'itens' => $itens,
-            'pagamentos' => [[
-                't_pag' => $tPag,
-                'v_pag' => $total,
-                'v_troco' => null,
-            ]],
+            'pagamentos' => $pagamentos,
             'dest_doc' => $destDoc,
             'dest_nome' => $destNome,
             'natureza' => 'VENDA',
@@ -559,6 +591,160 @@ class DocumentoOrchestrator
                 }
             }
         }
+    }
+
+    /**
+     * Resolve a forma principal (primeira do split ou legacy) para colunas do documento.
+     *
+     * @param  array<string, mixed>  $dados
+     * @return array{id: ?int, codigo: ?string, vencimento: ?string, pago_avista: bool}
+     */
+    private function resolverPagamentoPrincipal(Empresa $empresa, array $dados): array
+    {
+        if (! empty($dados['pagamentos']) && is_array($dados['pagamentos'])) {
+            $primeira = $dados['pagamentos'][0] ?? null;
+            if (! is_array($primeira) || empty($primeira['forma_pagamento_id'])) {
+                throw new InvalidArgumentException('Informe ao menos uma forma de pagamento.');
+            }
+
+            return $this->resolverPagamento($empresa, [
+                'forma_pagamento_id' => $primeira['forma_pagamento_id'],
+                'vencimento' => $dados['vencimento'] ?? null,
+            ]);
+        }
+
+        return $this->resolverPagamento($empresa, $dados);
+    }
+
+    /**
+     * Persiste documento_pagamentos. Aceita lista ou legacy (1 forma = total).
+     *
+     * @param  array<string, mixed>  $dados
+     */
+    private function sincronizarPagamentos(
+        DocumentoComercial $documento,
+        Empresa $empresa,
+        array $dados,
+        float $totalDocumento,
+    ): void {
+        $linhas = $this->normalizarLinhasPagamento($empresa, $dados, $totalDocumento);
+
+        DocumentoPagamento::query()
+            ->where('documento_comercial_id', $documento->id)
+            ->delete();
+
+        $ordem = 1;
+        $primeira = null;
+        foreach ($linhas as $linha) {
+            $row = DocumentoPagamento::create([
+                'documento_comercial_id' => $documento->id,
+                'forma_pagamento_id' => $linha['forma']->id,
+                'valor' => $linha['valor'],
+                'v_troco' => $linha['v_troco'],
+                'ordem' => $ordem,
+            ]);
+            if ($primeira === null) {
+                $primeira = $linha['forma'];
+            }
+            $ordem++;
+        }
+
+        if ($primeira !== null) {
+            $avista = $primeira->isAvista();
+            $dias = max(0, (int) $primeira->dias_recebimento);
+            $documento->update([
+                'forma_pagamento_id' => $primeira->id,
+                'forma_pagamento' => $primeira->codigo,
+                'pago_avista' => $avista,
+                'vencimento' => $avista
+                    ? now()->toDateString()
+                    : now()->addDays($dias)->toDateString(),
+            ]);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $dados
+     * @return list<array{forma: FormaPagamento, valor: float, v_troco: ?float}>
+     */
+    private function normalizarLinhasPagamento(Empresa $empresa, array $dados, float $totalDocumento): array
+    {
+        $totalDocumento = round($totalDocumento, 2);
+
+        if (! empty($dados['pagamentos']) && is_array($dados['pagamentos'])) {
+            if (count($dados['pagamentos']) < 1) {
+                throw new InvalidArgumentException('Informe ao menos uma forma de pagamento.');
+            }
+
+            $linhas = [];
+            $soma = 0.0;
+
+            foreach ($dados['pagamentos'] as $idx => $raw) {
+                if (! is_array($raw) || empty($raw['forma_pagamento_id'])) {
+                    throw new InvalidArgumentException('Forma de pagamento inválida na linha '.($idx + 1).'.');
+                }
+
+                $forma = FormaPagamento::query()
+                    ->where('empresa_id', $empresa->id)
+                    ->whereKey($raw['forma_pagamento_id'])
+                    ->where('ativo', true)
+                    ->first();
+
+                if (! $forma) {
+                    throw new InvalidArgumentException('Forma de pagamento inválida na linha '.($idx + 1).'.');
+                }
+
+                $valor = round((float) ($raw['valor'] ?? 0), 2);
+                if ($valor <= 0) {
+                    throw new InvalidArgumentException('Valor do pagamento deve ser maior que zero (linha '.($idx + 1).').');
+                }
+
+                $vTroco = null;
+                if (array_key_exists('v_troco', $raw) && $raw['v_troco'] !== null && $raw['v_troco'] !== '') {
+                    $vTroco = round((float) $raw['v_troco'], 2);
+                    if ($vTroco < 0) {
+                        throw new InvalidArgumentException('Troco inválido na linha '.($idx + 1).'.');
+                    }
+                    if ($forma->codigo !== '01') {
+                        throw new InvalidArgumentException('Troco só é permitido em dinheiro (linha '.($idx + 1).').');
+                    }
+                }
+
+                $soma = round($soma + $valor, 2);
+                $linhas[] = [
+                    'forma' => $forma,
+                    'valor' => $valor,
+                    'v_troco' => $vTroco,
+                ];
+            }
+
+            if (abs($soma - $totalDocumento) > 0.01) {
+                throw new InvalidArgumentException(sprintf(
+                    'A soma dos pagamentos (R$ %.2f) deve ser igual ao total do documento (R$ %.2f).',
+                    $soma,
+                    $totalDocumento
+                ));
+            }
+
+            return $linhas;
+        }
+
+        // Legacy: uma forma cobre o total (opcional em rascunho).
+        $pagamento = $this->resolverPagamento($empresa, $dados);
+        if (empty($pagamento['id'])) {
+            return [];
+        }
+
+        $forma = FormaPagamento::query()
+            ->where('empresa_id', $empresa->id)
+            ->whereKey($pagamento['id'])
+            ->firstOrFail();
+
+        return [[
+            'forma' => $forma,
+            'valor' => $totalDocumento,
+            'v_troco' => null,
+        ]];
     }
 
     /**

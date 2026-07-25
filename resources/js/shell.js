@@ -5,11 +5,46 @@ import {
     shouldAutoStartSpotlight,
 } from './spotlight';
 
+const PDV_OPERA_KEY = 'g2m-pdv-opera';
+
 /**
  * Shell Alpine component: rail panel, command palette, spotlight.
+ * Store `pdv` controla modo operação (tela cheia) na página do PDV.
  */
 export function registerAppShell(Alpine) {
-    Alpine.data('appShell', ({ initialGroup = null } = {}) => ({
+    Alpine.store('pdv', {
+        isPdvPage: false,
+        opera: false,
+
+        configure({ isPdv = false } = {}) {
+            this.isPdvPage = !!isPdv;
+            if (!this.isPdvPage) {
+                this.opera = false;
+                document.documentElement.classList.remove('pdv-opera');
+                return;
+            }
+
+            const saved = sessionStorage.getItem(PDV_OPERA_KEY);
+            // Padrão: modo operação ligado (tela cheia).
+            this.opera = saved === null ? true : saved === '1';
+            this.applyDom();
+        },
+
+        toggleOpera() {
+            if (!this.isPdvPage) {
+                return;
+            }
+            this.opera = !this.opera;
+            sessionStorage.setItem(PDV_OPERA_KEY, this.opera ? '1' : '0');
+            this.applyDom();
+        },
+
+        applyDom() {
+            document.documentElement.classList.toggle('pdv-opera', this.isPdvPage && this.opera);
+        },
+    });
+
+    Alpine.data('appShell', ({ initialGroup = null, isPdv = false } = {}) => ({
         activeGroup: initialGroup,
         mobileMore: false,
         cmdOpen: false,
@@ -19,8 +54,11 @@ export function registerAppShell(Alpine) {
         spotlightOpen: false,
         spotlightStep: 0,
         spotlightSteps: defaultSpotlightSteps,
+        isPdv: !!isPdv,
 
         init() {
+            Alpine.store('pdv').configure({ isPdv: this.isPdv });
+
             try {
                 const el = document.getElementById('g2m-nav-commands');
                 this.cmdItems = el ? JSON.parse(el.textContent || '[]') : [];
@@ -31,6 +69,17 @@ export function registerAppShell(Alpine) {
             if (shouldAutoStartSpotlight()) {
                 this.$nextTick(() => this.startSpotlight(false));
             }
+        },
+
+        get operaMode() {
+            return Alpine.store('pdv').opera;
+        },
+
+        contentPadClass() {
+            if (this.operaMode) {
+                return 'pl-0';
+            }
+            return this.activeGroup ? 'md:pl-[19rem]' : 'md:pl-rail';
         },
 
         toggleGroup(id) {

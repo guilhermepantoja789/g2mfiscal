@@ -32,42 +32,87 @@ class LancamentoFinanceiroService
             return $existentes->all();
         }
 
-        $documento->loadMissing('formaPagamentoRel');
+        $documento->loadMissing(['pagamentos.formaPagamento', 'formaPagamentoRel']);
+
+        $tipo = $documento->isVenda()
+            ? LancamentoFinanceiro::TIPO_RECEBER
+            : LancamentoFinanceiro::TIPO_PAGAR;
+
+        $criados = [];
+
+        $linhas = $documento->pagamentos;
+        if ($linhas->isNotEmpty()) {
+            foreach ($linhas as $linha) {
+                $forma = $linha->formaPagamento;
+                if ($forma && ! $forma->gera_lancamento) {
+                    continue;
+                }
+
+                if (! $forma) {
+                    throw new InvalidArgumentException('Forma de pagamento ausente no pagamento do documento.');
+                }
+
+                $parcelas = $this->formas->calcularParcelas($forma, (float) $linha->valor);
+
+                foreach ($parcelas as $parcela) {
+                    $criados[] = $this->criarLancamentoParcela(
+                        $documento,
+                        $tipo,
+                        $forma->id,
+                        $parcela
+                    );
+                }
+            }
+
+            return $criados;
+        }
 
         $forma = $documento->formaPagamentoRel;
         if ($forma && ! $forma->gera_lancamento) {
             return [];
         }
 
-        $tipo = $documento->isVenda()
-            ? LancamentoFinanceiro::TIPO_RECEBER
-            : LancamentoFinanceiro::TIPO_PAGAR;
-
         $parcelas = $this->resolverParcelas($documento, $forma);
-        $criados = [];
-
         foreach ($parcelas as $parcela) {
-            $pagoAvista = (bool) $parcela['pago_avista'];
-            $criados[] = LancamentoFinanceiro::create([
-                'empresa_id' => $documento->empresa_id,
-                'documento_comercial_id' => $documento->id,
-                'cliente_id' => $documento->cliente_id,
-                'fornecedor_id' => $documento->fornecedor_id,
-                'forma_pagamento_id' => $forma?->id,
-                'parcela' => $parcela['parcela'],
-                'total_parcelas' => $parcela['total_parcelas'],
-                'tipo' => $tipo,
-                'status' => $pagoAvista
-                    ? LancamentoFinanceiro::STATUS_PAGO
-                    : LancamentoFinanceiro::STATUS_ABERTO,
-                'valor' => $parcela['valor'],
-                'vencimento' => $parcela['vencimento'],
-                'pago_em' => $pagoAvista ? now() : null,
-                'descricao' => $this->descricaoPadrao($documento, $parcela),
-            ]);
+            $criados[] = $this->criarLancamentoParcela(
+                $documento,
+                $tipo,
+                $forma?->id,
+                $parcela
+            );
         }
 
         return $criados;
+    }
+
+    /**
+     * @param  array{parcela: int, total_parcelas: int, valor: float, vencimento: string, pago_avista: bool}  $parcela
+     */
+    private function criarLancamentoParcela(
+        DocumentoComercial $documento,
+        string $tipo,
+        ?int $formaPagamentoId,
+        array $parcela,
+    ): LancamentoFinanceiro {
+        $pagoAvista = (bool) $parcela['pago_avista'];
+
+        return LancamentoFinanceiro::create([
+            'empresa_id' => $documento->empresa_id,
+            'documento_comercial_id' => $documento->id,
+            'cliente_id' => $documento->cliente_id,
+            'fornecedor_id' => $documento->fornecedor_id,
+            'forma_pagamento_id' => $formaPagamentoId,
+            'parcela' => $parcela['parcela'],
+            'total_parcelas' => $parcela['total_parcelas'],
+            'tipo' => $tipo,
+            'status' => $pagoAvista
+                ? LancamentoFinanceiro::STATUS_PAGO
+                : LancamentoFinanceiro::STATUS_ABERTO,
+            'valor' => $parcela['valor'],
+            'vencimento' => $parcela['vencimento'],
+            'pago_em' => $pagoAvista ? now() : null,
+            'descricao' => $this->descricaoPadrao($documento, $parcela),
+        ]);
     }
 
     /**

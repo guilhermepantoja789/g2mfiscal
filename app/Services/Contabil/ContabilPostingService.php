@@ -56,8 +56,9 @@ class ContabilPostingService
         }
 
         $data = $this->dataCompetenciaDocumento($documento);
+        $debitos = $this->resolverDebitosPorForma($documento, $mapa['debito'], $valor, $origemMap);
 
-        DB::transaction(function () use ($documento, $mapa, $valor, $data, $origemMap) {
+        DB::transaction(function () use ($documento, $mapa, $valor, $data, $origemMap, $debitos) {
             $periodo = $this->garantirPeriodoAberto((int) $documento->empresa_id, $data->format('Y-m'));
 
             $lancamento = LancamentoContabil::create([
@@ -75,12 +76,14 @@ class ContabilPostingService
                 'status' => LancamentoContabil::STATUS_LANCADO,
             ]);
 
-            LancamentoContabilItem::create([
-                'lancamento_id' => $lancamento->id,
-                'conta_id' => $mapa['debito']->id,
-                'tipo' => 'D',
-                'valor' => $valor,
-            ]);
+            foreach ($debitos as $debito) {
+                LancamentoContabilItem::create([
+                    'lancamento_id' => $lancamento->id,
+                    'conta_id' => $debito['conta']->id,
+                    'tipo' => 'D',
+                    'valor' => $debito['valor'],
+                ]);
+            }
 
             LancamentoContabilItem::create([
                 'lancamento_id' => $lancamento->id,
@@ -156,7 +159,9 @@ class ContabilPostingService
         }
 
         $contas = [
-            '1.1.01' => ['nome' => 'Caixa / Clientes', 'tipo' => 'ativo', 'natureza' => 'D'],
+            '1.1.01' => ['nome' => 'Caixa', 'tipo' => 'ativo', 'natureza' => 'D'],
+            '1.1.02' => ['nome' => 'Banco / PIX', 'tipo' => 'ativo', 'natureza' => 'D'],
+            '1.1.03' => ['nome' => 'Cartões a receber', 'tipo' => 'ativo', 'natureza' => 'D'],
             '1.2.01' => ['nome' => 'Estoques', 'tipo' => 'ativo', 'natureza' => 'D'],
             '2.1.01' => ['nome' => 'Fornecedores', 'tipo' => 'passivo', 'natureza' => 'C'],
             '3.1.01' => ['nome' => 'Receita de vendas (produtos)', 'tipo' => 'receita', 'natureza' => 'C'],
@@ -224,6 +229,26 @@ class ContabilPostingService
     }
 
     /**
+     * Conta contábil padrão (débito) sugerida para o tPag SEFAZ.
+     */
+    public function codigoContaPadraoPorTPag(string $codigo): string
+    {
+        return match ($codigo) {
+            '17' => '1.1.02',
+            '03', '04' => '1.1.03',
+            default => '1.1.01',
+        };
+    }
+
+    public function resolverContaPorCodigo(int $empresaId, string $codigo): ?ContaContabil
+    {
+        return ContaContabil::query()
+            ->where('empresa_id', $empresaId)
+            ->where('codigo', $codigo)
+            ->first();
+    }
+
+    /**
      * @return array{debito: ContaContabil, credito: ContaContabil}|null
      */
     private function resolverMapaDebitoCredito(int $empresaId, string $origem): ?array
@@ -252,6 +277,41 @@ class ContabilPostingService
         }
 
         return ['debito' => $debito, 'credito' => $credito];
+    }
+
+    /**
+     * Vendas: N débitos por forma (conta da forma ou fallback). Compra: 1 débito pelo total.
+     *
+     * @return list<array{conta: ContaContabil, valor: float}>
+     */
+    private function resolverDebitosPorForma(
+        DocumentoComercial $documento,
+        ContaContabil $debitoFallback,
+        float $valorTotal,
+        string $origemMap,
+    ): array {
+        if ($origemMap === self::MAP_NFE_COMPRA) {
+            return [['conta' => $debitoFallback, 'valor' => $valorTotal]];
+        }
+
+        $documento->loadMissing(['pagamentos.formaPagamento.contaContabil']);
+
+        $linhas = $documento->pagamentos;
+        if ($linhas->isEmpty()) {
+            return [['conta' => $debitoFallback, 'valor' => $valorTotal]];
+        }
+
+        $agrupado = [];
+        foreach ($linhas as $linha) {
+            $conta = $linha->formaPagamento?->contaContabil ?? $debitoFallback;
+            $key = (string) $conta->id;
+            if (! isset($agrupado[$key])) {
+                $agrupado[$key] = ['conta' => $conta, 'valor' => 0.0];
+            }
+            $agrupado[$key]['valor'] = round($agrupado[$key]['valor'] + (float) $linha->valor, 2);
+        }
+
+        return array_values($agrupado);
     }
 
     private function origemMapeamento(DocumentoComercial $documento): ?string

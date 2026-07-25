@@ -6,6 +6,7 @@
 
 <aside
     data-spotlight="nav-rail"
+    x-show="!$store.pdv.opera"
     class="hidden md:flex md:fixed md:inset-y-0 md:left-0 md:z-30 md:w-rail md:flex-col bg-slate-900 border-r border-slate-800"
     aria-label="Módulos"
 >

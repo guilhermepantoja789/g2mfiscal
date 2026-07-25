@@ -16,23 +16,28 @@ class FormaPagamentoController extends Controller
 
         $formas = FormaPagamento::query()
             ->where('empresa_id', $empresa->id)
+            ->with('contaContabil')
             ->orderBy('nome')
             ->get();
 
         return view('formas-pagamento.index', compact('formas'));
     }
 
-    public function create()
+    public function create(FormaPagamentoService $service)
     {
-        return view('formas-pagamento.create');
+        $empresa = $this->empresaAtiva();
+        $contas = $service->contasParaSelect($empresa);
+
+        return view('formas-pagamento.create', compact('contas'));
     }
 
-    public function store(Request $request)
+    public function store(Request $request, FormaPagamentoService $service)
     {
-        $validated = $this->validateForma($request);
+        $empresa = $this->empresaAtiva();
+        $validated = $this->validateForma($request, $empresa);
 
         FormaPagamento::create([
-            'empresa_id' => session('empresa_ativa'),
+            'empresa_id' => $empresa->id,
             ...$validated,
             'ativo' => $request->boolean('ativo', true),
             'gera_lancamento' => $request->boolean('gera_lancamento', true),
@@ -42,17 +47,21 @@ class FormaPagamentoController extends Controller
             ->with('success', 'Forma de pagamento cadastrada.');
     }
 
-    public function edit(FormaPagamento $formas_pagamento)
+    public function edit(FormaPagamento $formas_pagamento, FormaPagamentoService $service)
     {
         $this->authorizeEmpresa($formas_pagamento->empresa_id);
+        $contas = $service->contasParaSelect($this->empresaAtiva());
 
-        return view('formas-pagamento.edit', ['forma' => $formas_pagamento]);
+        return view('formas-pagamento.edit', [
+            'forma' => $formas_pagamento,
+            'contas' => $contas,
+        ]);
     }
 
     public function update(Request $request, FormaPagamento $formas_pagamento)
     {
         $this->authorizeEmpresa($formas_pagamento->empresa_id);
-        $validated = $this->validateForma($request);
+        $validated = $this->validateForma($request, $this->empresaAtiva());
 
         $formas_pagamento->update([
             ...$validated,
@@ -76,7 +85,7 @@ class FormaPagamentoController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function validateForma(Request $request): array
+    private function validateForma(Request $request, Empresa $empresa): array
     {
         $validated = $request->validate([
             'codigo' => 'required|string|max:10',
@@ -85,9 +94,22 @@ class FormaPagamentoController extends Controller
             'dias_recebimento' => 'nullable|integer|min:0|max:3650',
             'parcelas' => 'nullable|integer|min:1|max:48',
             'juros_percentual' => 'nullable|numeric|min:0|max:100',
+            'conta_contabil_id' => 'nullable|integer|exists:contas_contabeis,id',
             'ativo' => 'nullable|boolean',
             'gera_lancamento' => 'nullable|boolean',
         ]);
+
+        if (! empty($validated['conta_contabil_id'])) {
+            $ok = \App\Models\ContaContabil::query()
+                ->where('empresa_id', $empresa->id)
+                ->whereKey($validated['conta_contabil_id'])
+                ->exists();
+            if (! $ok) {
+                abort(422, 'Conta contábil inválida para a empresa.');
+            }
+        } else {
+            $validated['conta_contabil_id'] = null;
+        }
 
         $validated['dias_recebimento'] = (int) ($validated['dias_recebimento'] ?? 0);
         $validated['parcelas'] = max(1, (int) ($validated['parcelas'] ?? 1));

@@ -135,27 +135,54 @@
 
             <!-- 2. Pagamento -->
             <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
-                <div class="flex items-center border-b border-gray-100 pb-4 mb-6">
-                    <div class="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center mr-3 text-sm font-extrabold">2</div>
-                    <h3 class="text-lg font-bold text-gray-900">Pagamento</h3>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div>
-                        <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Forma de pagamento</label>
-                        <select name="t_pag" class="block w-full rounded-xl border-gray-200 bg-gray-50 text-gray-900 focus:ring-blue-500 focus:border-blue-500 sm:text-sm cursor-pointer">
-                            <option value="01" @selected(old('t_pag', '01') === '01')>01 — Dinheiro</option>
-                            <option value="03" @selected(old('t_pag') === '03')>03 — Crédito</option>
-                            <option value="04" @selected(old('t_pag') === '04')>04 — Débito</option>
-                            <option value="17" @selected(old('t_pag') === '17')>17 — PIX</option>
-                        </select>
+                <div class="flex items-center justify-between border-b border-gray-100 pb-4 mb-6 gap-2">
+                    <div class="flex items-center">
+                        <div class="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center mr-3 text-sm font-extrabold">2</div>
+                        <h3 class="text-lg font-bold text-gray-900">Pagamentos</h3>
                     </div>
-                    <div>
-                        <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Troco (dinheiro)</label>
-                        <input type="number" step="0.01" name="v_troco" value="{{ old('v_troco') }}"
-                               placeholder="Opcional"
-                               class="block w-full rounded-xl border-gray-200 bg-gray-50 text-gray-900 focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                    </div>
+                    <button type="button" @click="addPagamento()"
+                            class="inline-flex items-center px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 font-bold text-xs hover:bg-indigo-100">
+                        + Forma
+                    </button>
                 </div>
+                <div class="space-y-3">
+                    <template x-for="(pag, pidx) in pagamentos" :key="pag._key">
+                        <div class="grid grid-cols-1 md:grid-cols-6 gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
+                            <div class="md:col-span-2">
+                                <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Forma</label>
+                                <select :name="'pagamentos[' + pidx + '][t_pag]'" x-model="pag.t_pag"
+                                        class="block w-full rounded-lg border-gray-200 bg-white text-sm cursor-pointer">
+                                    <option value="01">01 — Dinheiro</option>
+                                    <option value="03">03 — Crédito</option>
+                                    <option value="04">04 — Débito</option>
+                                    <option value="17">17 — PIX</option>
+                                </select>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Valor</label>
+                                <input type="number" step="0.01" min="0.01"
+                                       :name="'pagamentos[' + pidx + '][v_pag]'" x-model.number="pag.v_pag" required
+                                       class="block w-full rounded-lg border-gray-200 bg-white text-sm font-mono text-right">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Troco</label>
+                                <input type="number" step="0.01" min="0"
+                                       :name="'pagamentos[' + pidx + '][v_troco]'" x-model.number="pag.v_troco"
+                                       :disabled="pag.t_pag !== '01'"
+                                       class="block w-full rounded-lg border-gray-200 bg-white text-sm font-mono text-right disabled:opacity-40">
+                            </div>
+                            <div class="flex items-end">
+                                <button type="button" @click="removePagamento(pidx)" x-show="pagamentos.length > 1"
+                                        class="text-xs font-bold text-rose-600 hover:underline">Remover</button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                <p class="mt-3 text-xs text-gray-500">
+                    Restante:
+                    <span class="font-mono font-bold" :class="Math.abs(restantePagamento) < 0.01 ? 'text-emerald-600' : 'text-amber-600'"
+                          x-text="fmt(restantePagamento)"></span>
+                </p>
             </div>
 
             <!-- 3. Destinatário -->
@@ -227,6 +254,7 @@
     <script>
         function nfceAvulsaForm() {
             const oldItens = @json(old('itens'));
+            const oldPags = @json(old('pagamentos'));
             return {
                 clientesBuscarUrl: @json(route('clientes.buscar')),
                 clienteQuery: '',
@@ -234,12 +262,19 @@
                 destDoc: @json(old('dest_doc', '')),
                 destNome: @json(old('dest_nome', '')),
                 _keySeq: 0,
+                _pagKey: 0,
                 itens: [],
+                pagamentos: [],
                 init() {
                     if (Array.isArray(oldItens) && oldItens.length) {
                         this.itens = oldItens.map((i) => this.normalizeItem(i));
                     } else {
                         this.itens = [this.emptyItem()];
+                    }
+                    if (Array.isArray(oldPags) && oldPags.length) {
+                        this.pagamentos = oldPags.map((p) => this.normalizePag(p));
+                    } else {
+                        this.pagamentos = [this.emptyPag()];
                     }
                 },
                 emptyItem() {
@@ -252,6 +287,32 @@
                         quantidade: 1,
                         valor_unitario: '',
                     });
+                },
+                emptyPag() {
+                    return this.normalizePag({ t_pag: '01', v_pag: '', v_troco: '' });
+                },
+                normalizePag(p) {
+                    this._pagKey += 1;
+                    return {
+                        _key: this._pagKey,
+                        t_pag: p.t_pag ?? '01',
+                        v_pag: p.v_pag !== undefined && p.v_pag !== null && p.v_pag !== '' ? Number(p.v_pag) : '',
+                        v_troco: p.v_troco !== undefined && p.v_troco !== null && p.v_troco !== '' ? Number(p.v_troco) : '',
+                    };
+                },
+                addPagamento() {
+                    const rest = this.restantePagamento > 0 ? Math.round(this.restantePagamento * 100) / 100 : '';
+                    this.pagamentos.push(this.normalizePag({ t_pag: '17', v_pag: rest, v_troco: '' }));
+                },
+                removePagamento(idx) {
+                    if (this.pagamentos.length <= 1) return;
+                    this.pagamentos.splice(idx, 1);
+                },
+                get somaPagamentos() {
+                    return this.pagamentos.reduce((s, p) => s + (Number(p.v_pag) || 0), 0);
+                },
+                get restantePagamento() {
+                    return Math.round((this.total - this.somaPagamentos) * 100) / 100;
                 },
                 normalizeItem(i) {
                     this._keySeq += 1;

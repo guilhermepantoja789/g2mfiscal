@@ -44,20 +44,26 @@ class PdvController extends Controller
 
     public function buscarProdutos(Request $request)
     {
-        $empresaId = session('empresa_ativa');
+        $empresa = $this->empresaAtiva();
         $q = trim((string) $request->get('q', ''));
 
         if ($q === '') {
             return response()->json([]);
         }
 
+        $eanDigits = preg_replace('/\D/', '', $q) ?: '';
+
         $produtos = Produto::query()
-            ->where('empresa_id', $empresaId)
+            ->where('empresa_id', $empresa->id)
             ->where('ativo', true)
-            ->where(function ($query) use ($q) {
-                $query->where('ean', $q)
-                    ->orWhere('sku', $q)
-                    ->orWhere('descricao', 'like', '%'.$q.'%');
+            ->where(function ($query) use ($q, $eanDigits) {
+                $query->where('descricao', 'like', '%'.$q.'%')
+                    ->orWhere('sku', 'like', '%'.$q.'%')
+                    ->orWhere('ean', 'like', '%'.$q.'%');
+
+                if ($eanDigits !== '' && $eanDigits !== $q) {
+                    $query->orWhere('ean', 'like', '%'.$eanDigits.'%');
+                }
             })
             ->orderBy('descricao')
             ->limit(15)
@@ -108,7 +114,11 @@ class PdvController extends Controller
         $empresa = $this->empresaAtiva();
 
         $validated = $request->validate([
-            'forma_pagamento_id' => 'required|integer',
+            'pagamentos' => 'required|array|min:1',
+            'pagamentos.*.forma_pagamento_id' => 'required|integer',
+            'pagamentos.*.valor' => 'required|numeric|min:0.01',
+            'pagamentos.*.v_troco' => 'nullable|numeric|min:0',
+            'forma_pagamento_id' => 'nullable|integer',
             'itens' => 'required|array|min:1',
             'itens.*.produto_id' => 'required|integer',
             'itens.*.quantidade' => 'required|numeric|min:0.001',
@@ -134,11 +144,20 @@ class PdvController extends Controller
             $clienteId = $cliente->id;
         }
 
-        $forma = FormaPagamento::query()
-            ->where('empresa_id', $empresa->id)
-            ->whereKey($validated['forma_pagamento_id'])
-            ->where('ativo', true)
-            ->firstOrFail();
+        $pagamentos = [];
+        foreach ($validated['pagamentos'] as $linha) {
+            FormaPagamento::query()
+                ->where('empresa_id', $empresa->id)
+                ->whereKey($linha['forma_pagamento_id'])
+                ->where('ativo', true)
+                ->firstOrFail();
+
+            $pagamentos[] = [
+                'forma_pagamento_id' => (int) $linha['forma_pagamento_id'],
+                'valor' => round((float) $linha['valor'], 2),
+                'v_troco' => isset($linha['v_troco']) ? round((float) $linha['v_troco'], 2) : null,
+            ];
+        }
 
         $itens = [];
         foreach ($validated['itens'] as $linha) {
@@ -164,7 +183,8 @@ class PdvController extends Controller
             $doc = $orchestrator->criarRascunho($empresa, [
                 'tipo' => DocumentoComercial::TIPO_VENDA,
                 'canal_fiscal' => DocumentoComercial::CANAL_NFCE,
-                'forma_pagamento_id' => $forma->id,
+                'pagamentos' => $pagamentos,
+                'forma_pagamento_id' => $pagamentos[0]['forma_pagamento_id'],
                 'cliente_id' => $clienteId,
                 'dest_doc' => $destDoc,
                 'dest_nome' => $destNome,

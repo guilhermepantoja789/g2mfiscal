@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="h-full bg-surface"
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}"
+      class="h-full bg-surface {{ request()->routeIs('pdv.*') ? 'overflow-hidden' : '' }}"
       @if(request()->routeIs('pdv.*', 'documentos.importar*')) data-turbo="false" @endif>
 <head>
     <meta charset="utf-8">
@@ -13,9 +14,10 @@
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="h-full font-sans antialiased text-slate-800">
+<body class="h-full font-sans antialiased text-slate-800 {{ request()->routeIs('pdv.*') ? 'overflow-hidden' : '' }}">
 
 @php
+    $isPdv = request()->routeIs('pdv.*');
     $initialGroup = null;
     foreach (($nav['groups'] ?? []) as $g) {
         if (($g['active'] ?? false) && (empty($g['href']) || count($g['items'] ?? []) > 1)) {
@@ -26,9 +28,10 @@
 @endphp
 
 <div
-    class="min-h-full"
-    x-data="appShell({ initialGroup: @js($initialGroup) })"
+    class="{{ $isPdv ? 'h-dvh overflow-hidden' : 'min-h-full' }}"
+    x-data="appShell({ initialGroup: @js($initialGroup), isPdv: @js($isPdv) })"
     @keydown.window="onGlobalKey($event)"
+    @pdv-toggle-opera.window="$store.pdv.toggleOpera()"
 >
     @include('layouts.partials.nav-rail')
     @include('layouts.partials.nav-panel')
@@ -37,10 +40,13 @@
     @include('layouts.partials.spotlight')
 
     <div
-        class="flex min-h-full flex-col pb-16 md:pb-0"
-        :class="activeGroup ? 'md:pl-[19rem]' : 'md:pl-rail'"
+        class="flex flex-col {{ $isPdv ? 'h-full overflow-hidden' : 'min-h-full' }} {{ $isPdv ? '' : 'pb-16 md:pb-0' }}"
+        :class="contentPadClass()"
     >
-        <header class="sticky top-0 z-10 flex h-14 flex-shrink-0 items-center border-b border-slate-200 bg-white/95 backdrop-blur">
+        <header
+            x-show="!$store.pdv.opera"
+            class="sticky top-0 z-10 flex h-14 flex-shrink-0 items-center border-b border-slate-200 bg-white/95 backdrop-blur"
+        >
             <div class="flex flex-1 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
                 <div class="min-w-0 flex-1">
                     <h1 class="truncate text-base font-semibold leading-tight text-slate-900 max-w-[200px] sm:max-w-md">
@@ -156,12 +162,18 @@
             </div>
         </header>
 
-        <main class="flex-1 bg-surface">
-            <div class="py-6">
-                <div class="mx-auto max-w-content px-4 sm:px-6 lg:px-8 page-shell">
+        <main class="flex-1 bg-surface {{ $isPdv ? 'min-h-0 overflow-hidden' : '' }}">
+            @if($isPdv)
+                <div class="h-full min-h-0 overflow-hidden px-3 py-2 sm:px-4 sm:py-3">
                     {{ $slot }}
                 </div>
-            </div>
+            @else
+                <div class="py-6">
+                    <div class="mx-auto max-w-content px-4 sm:px-6 lg:px-8 page-shell">
+                        {{ $slot }}
+                    </div>
+                </div>
+            @endif
         </main>
     </div>
 </div>

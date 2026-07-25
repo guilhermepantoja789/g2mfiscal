@@ -84,6 +84,11 @@ class DocumentoComercial extends Model
         return $this->belongsTo(FormaPagamento::class, 'forma_pagamento_id');
     }
 
+    public function pagamentos(): HasMany
+    {
+        return $this->hasMany(DocumentoPagamento::class)->orderBy('ordem');
+    }
+
     public function itens(): HasMany
     {
         return $this->hasMany(DocumentoItem::class)->orderBy('ordem');

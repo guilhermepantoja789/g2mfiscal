@@ -61,7 +61,11 @@ class NfceController extends Controller
             'itens.*.unidade' => 'required|string|max:6',
             'itens.*.quantidade' => 'required|numeric|min:0.001',
             'itens.*.valor_unitario' => 'required|numeric|min:0.01',
-            't_pag' => 'required|in:01,03,04,17',
+            'pagamentos' => 'required|array|min:1',
+            'pagamentos.*.t_pag' => 'required|in:01,03,04,17',
+            'pagamentos.*.v_pag' => 'required|numeric|min:0.01',
+            'pagamentos.*.v_troco' => 'nullable|numeric|min:0',
+            't_pag' => 'nullable|in:01,03,04,17',
             'v_troco' => 'nullable|numeric|min:0',
             'dest_doc' => 'nullable|string|max:18',
             'dest_nome' => 'nullable|string|max:120',
@@ -86,10 +90,42 @@ class NfceController extends Controller
             ];
         }
 
-        $vTroco = isset($validated['v_troco']) ? (float) $validated['v_troco'] : null;
-        $vPag = $validated['t_pag'] === '01' && $vTroco !== null && $vTroco > 0
-            ? round($total + $vTroco, 2)
-            : $total;
+        $pagamentosPayload = [];
+        $somaPag = 0.0;
+        foreach ($validated['pagamentos'] as $idx => $pag) {
+            $tPag = $pag['t_pag'];
+            $vPag = round((float) $pag['v_pag'], 2);
+            $vTroco = isset($pag['v_troco']) ? round((float) $pag['v_troco'], 2) : null;
+            if ($vTroco !== null && $vTroco > 0 && $tPag !== '01') {
+                return back()->withErrors(['pagamentos' => 'Troco só é permitido em dinheiro.'])->withInput();
+            }
+            $somaPag = round($somaPag + $vPag, 2);
+            $pagamentosPayload[] = [
+                't_pag' => $tPag,
+                'v_pag' => $vPag,
+                'v_troco' => $tPag === '01' ? $vTroco : null,
+            ];
+        }
+
+        // No NFC-e, dinheiro com troco: v_pag da linha inclui o troco; a soma dos v_pag
+        // (sem troco embutido nas outras) deve cobrir o total. Aceitamos soma == total
+        // ou, se houver troco em dinheiro, soma_valores_liquidos == total.
+        $trocoTotal = 0.0;
+        foreach ($pagamentosPayload as $p) {
+            if (($p['t_pag'] ?? '') === '01' && ($p['v_troco'] ?? 0) > 0) {
+                $trocoTotal = round($trocoTotal + (float) $p['v_troco'], 2);
+            }
+        }
+        $somaLiquida = round($somaPag - $trocoTotal, 2);
+        if (abs($somaLiquida - $total) > 0.01 && abs($somaPag - $total) > 0.01) {
+            return back()->withErrors([
+                'pagamentos' => sprintf(
+                    'A soma dos pagamentos (R$ %.2f) deve ser igual ao total (R$ %.2f).',
+                    $somaLiquida,
+                    $total
+                ),
+            ])->withInput();
+        }
 
         [$numero, $serie, $ambiente] = $issuer->reservarNumero($empresa);
 
@@ -98,11 +134,7 @@ class NfceController extends Controller
 
         $payload = [
             'itens' => $itensPayload,
-            'pagamentos' => [[
-                't_pag' => $validated['t_pag'],
-                'v_pag' => $vPag,
-                'v_troco' => $validated['t_pag'] === '01' ? $vTroco : null,
-            ]],
+            'pagamentos' => $pagamentosPayload,
             'dest_doc' => $validated['dest_doc'] ? preg_replace('/\D/', '', $validated['dest_doc']) : null,
             'dest_nome' => $validated['dest_nome'] ?? null,
             'natureza' => 'VENDA',

@@ -24,6 +24,7 @@ class FormaPagamento extends Model
         'parcelas',
         'juros_percentual',
         'gera_lancamento',
+        'conta_contabil_id',
     ];
 
     protected function casts(): array
@@ -42,6 +43,11 @@ class FormaPagamento extends Model
         return $this->belongsTo(Empresa::class);
     }
 
+    public function contaContabil(): BelongsTo
+    {
+        return $this->belongsTo(ContaContabil::class, 'conta_contabil_id');
+    }
+
     public function documentos(): HasMany
     {
         return $this->hasMany(DocumentoComercial::class);
@@ -50,6 +56,11 @@ class FormaPagamento extends Model
     public function lancamentos(): HasMany
     {
         return $this->hasMany(LancamentoFinanceiro::class);
+    }
+
+    public function documentoPagamentos(): HasMany
+    {
+        return $this->hasMany(DocumentoPagamento::class);
     }
 
     public function isAvista(): bool
