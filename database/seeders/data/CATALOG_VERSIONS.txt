@@ -1,0 +1,8 @@
+# Catalog versions for nfse:seed-ibscbs
+#
+# Update this file when replacing CSVs / annexes.
+ind_ops: AnexoVII-IndOp_IBSCBS_V1.00.00 (26)
+class_tribs: IT-2025.002-SVRS (+ destaque Manaus/TI/ZFM)
+nbs_codes: MDIC-NBS-2.0 leaf-9digits
+nbs_correlacoes: AnexoVIII-Correlacao_V1.01.00
+generated: 2026-08-06

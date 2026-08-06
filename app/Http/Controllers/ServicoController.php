@@ -7,9 +7,13 @@ use App\Models\Empresa;
 use App\Models\TributacaoNacional;
 use App\Models\IndOp;
 use App\Models\ClassTrib;
+use App\Models\NbsCode;
+use App\Models\NbsCorrelacao;
+use App\Services\NfseEmitPayloadBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Str;
 
 class ServicoController extends Controller
 {
@@ -34,16 +38,10 @@ class ServicoController extends Controller
         $isManaus = $empresa->cod_ibge_mun == '1302603';
         $padraoMunicipal = $isManaus ? '100' : '';
 
-        // --- MUDANÇA AQUI: Buscando os códigos do banco ---
-        // Pegamos apenas os campos necessários para não pesar a memória
-        $codigosNacionais = TributacaoNacional::select('codigo', 'item_lc116', 'descricao')
-            ->orderBy('codigo')
-            ->get();
-
-        $indOps = IndOp::query()->where('ativo', true)->orderBy('codigo')->get();
-        $classTribs = ClassTrib::query()->where('ativo', true)->orderBy('cst')->orderBy('c_class_trib')->get();
-
-        return view('servicos.create', compact('isManaus', 'padraoMunicipal', 'codigosNacionais', 'indOps', 'classTribs'));
+        return view('servicos.create', array_merge(
+            compact('isManaus', 'padraoMunicipal'),
+            $this->catalogosParaWizard($isManaus)
+        ));
     }
 
     public function store(Request $request)
@@ -60,12 +58,15 @@ class ServicoController extends Controller
             $input['codigo_tributacao_nacional'] = $this->formatCodigoNacional($limpo);
         }
 
+        $input['codigo_nbs'] = NfseEmitPayloadBuilder::normalizeCnbs($input['codigo_nbs'] ?? null);
+
         $request->replace($input);
 
         $request->validate([
             'nome' => 'required|string|max:100',
             'codigo_tributacao_nacional' => 'required|string',
             'codigo_tributacao_municipal' => 'required|string',
+            'codigo_nbs' => 'required|digits:9',
             'valor_unitario' => 'required|numeric|min:0',
             'fin_nfse' => 'required|in:0',
             'c_ind_op' => ['required', 'digits:6', Rule::exists('ind_ops', 'codigo')],
@@ -79,6 +80,9 @@ class ServicoController extends Controller
                 'nullable', 'string',
                 Rule::unique('servicos')->where(fn ($q) => $q->where('empresa_id', $empresa->id))
             ],
+        ], [
+            'codigo_nbs.required' => 'Informe o código NBS (cNBS) com 9 dígitos. Obrigatório com IBS/CBS.',
+            'codigo_nbs.digits' => 'O código NBS deve ter exatamente 9 dígitos (ex: 115011000 ou 1.1501.10.00).',
         ]);
 
         $empresa->servicos()->create($request->only([
@@ -102,19 +106,14 @@ class ServicoController extends Controller
     {
         if ($servico->empresa_id != session('empresa_ativa')) abort(403);
 
-        $empresa = Empresa::find($servico->empresa_id); // Busca a empresa para checar se é Manaus
-
-        // Variáveis necessárias para a view atualizada
+        $empresa = Empresa::find($servico->empresa_id);
         $isManaus = $empresa->cod_ibge_mun == '1302603';
+        $padraoMunicipal = $isManaus ? '100' : '';
 
-        $codigosNacionais = TributacaoNacional::select('codigo', 'item_lc116', 'descricao')
-            ->orderBy('codigo')
-            ->get();
-
-        $indOps = IndOp::query()->where('ativo', true)->orderBy('codigo')->get();
-        $classTribs = ClassTrib::query()->where('ativo', true)->orderBy('cst')->orderBy('c_class_trib')->get();
-
-        return view('servicos.edit', compact('servico', 'isManaus', 'codigosNacionais', 'indOps', 'classTribs'));
+        return view('servicos.edit', array_merge(
+            compact('servico', 'isManaus', 'padraoMunicipal'),
+            $this->catalogosParaWizard($isManaus)
+        ));
     }
 
     public function update(Request $request, Servico $servico)
@@ -129,12 +128,15 @@ class ServicoController extends Controller
             $input['codigo_tributacao_nacional'] = $this->formatCodigoNacional($limpo);
         }
 
+        $input['codigo_nbs'] = NfseEmitPayloadBuilder::normalizeCnbs($input['codigo_nbs'] ?? null);
+
         $request->replace($input);
 
         $request->validate([
             'nome' => 'required|string|max:100',
             'codigo_tributacao_nacional' => 'required|string',
             'codigo_tributacao_municipal' => 'required|string',
+            'codigo_nbs' => 'required|digits:9',
             'valor_unitario' => 'required|numeric|min:0',
             'fin_nfse' => 'required|in:0',
             'c_ind_op' => ['required', 'digits:6', Rule::exists('ind_ops', 'codigo')],
@@ -148,6 +150,9 @@ class ServicoController extends Controller
                 'nullable', 'string',
                 Rule::unique('servicos')->where(fn ($q) => $q->where('empresa_id', $servico->empresa_id))->ignore($servico->id)
             ],
+        ], [
+            'codigo_nbs.required' => 'Informe o código NBS (cNBS) com 9 dígitos. Obrigatório com IBS/CBS.',
+            'codigo_nbs.digits' => 'O código NBS deve ter exatamente 9 dígitos (ex: 115011000 ou 1.1501.10.00).',
         ]);
 
         $servico->update($request->only([
@@ -175,6 +180,42 @@ class ServicoController extends Controller
     }
 
     // Helpers
+    private function catalogosParaWizard(bool $isManaus): array
+    {
+        $codigosNacionais = TributacaoNacional::select('codigo', 'item_lc116', 'descricao')
+            ->orderBy('codigo')
+            ->get();
+
+        $indOps = IndOp::query()->where('ativo', true)->orderBy('codigo')->get();
+        $classTribs = ClassTrib::query()
+            ->where('ativo', true)
+            ->orderByDesc('destaque')
+            ->orderBy('cst')
+            ->orderBy('c_class_trib')
+            ->get();
+
+        $nbsCodes = NbsCode::query()->where('ativo', true)->orderBy('codigo')->get(['codigo', 'descricao']);
+        $nbsMap = $nbsCodes->mapWithKeys(fn ($n) => [$n->codigo => Str::limit($n->descricao, 80)])->all();
+
+        $correlQuery = NbsCorrelacao::query();
+        if ($isManaus) {
+            $correlQuery->orderByRaw("CASE WHEN escopo = 'ti_manaus' THEN 0 ELSE 1 END");
+        }
+        $correlQuery->orderBy('c_trib_nac')->orderBy('codigo_nbs');
+        $correlacoesJson = [];
+        foreach ($correlQuery->get() as $row) {
+            $correlacoesJson[$row->c_trib_nac][] = [
+                'codigo' => $row->codigo_nbs,
+                'c_ind_op' => $row->c_ind_op,
+                'cst' => $row->cst,
+                'c_class_trib' => $row->c_class_trib,
+                'escopo' => $row->escopo,
+            ];
+        }
+
+        return compact('codigosNacionais', 'indOps', 'classTribs', 'nbsCodes', 'nbsMap', 'correlacoesJson');
+    }
+
     private function parseMoney($v) {
         return is_numeric($v) ? $v : (float) str_replace(['.', ','], ['', '.'], $v);
     }

@@ -446,7 +446,10 @@
             document.getElementById('filterForm').submit();
         }
 
-        document.addEventListener('DOMContentLoaded', function () {
+        g2mPageInit('dashboard-home', function () {
+                const __guard = document.getElementById('faturamentoChart');
+                if (!__guard || typeof Chart === 'undefined') return;
+                document.querySelectorAll('canvas').forEach(c => { try { Chart.getChart(c)?.destroy(); } catch (e) {} });
             // Configuração dos Gráficos
             const ctxFaturamento = document.getElementById('faturamentoChart').getContext('2d');
             new Chart(ctxFaturamento, {

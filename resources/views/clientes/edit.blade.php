@@ -12,6 +12,7 @@
                       rua: '{{ $cliente->logradouro }}',
                       bairro: '{{ $cliente->bairro }}',
                       uf: '{{ $cliente->uf }}',
+                      cidadeCodigo: '{{ $cliente->cidade_codigo }}',
                       loadingCep: false,
 
                       fetchCep() {
@@ -25,6 +26,7 @@
                                           this.rua = data.logradouro;
                                           this.bairro = data.bairro;
                                           this.uf = data.uf;
+                                          this.cidadeCodigo = data.ibge || '';
                                           document.getElementById('numero').focus();
                                       }
                                   })
@@ -88,7 +90,7 @@
                                    class="w-full rounded-md border-gray-300 text-sm">
                         </div>
 
-                        <div class="md:col-span-5">
+                        <div class="md:col-span-4">
                             <label class="text-xs font-bold text-gray-500">Bairro</label>
                             <input type="text" name="bairro" x-model="bairro"
                                    class="w-full rounded-md border-gray-300 text-sm bg-gray-50">
@@ -98,6 +100,16 @@
                             <label class="text-xs font-bold text-gray-500">UF</label>
                             <input type="text" name="uf" x-model="uf" maxlength="2"
                                    class="w-full rounded-md border-gray-300 text-sm bg-gray-50 text-center uppercase">
+                        </div>
+
+                        <div class="md:col-span-3">
+                            <label class="text-xs font-bold text-gray-500">Cód. IBGE município</label>
+                            <input type="text" name="cidade_codigo" x-model="cidadeCodigo" maxlength="7"
+                                   inputmode="numeric" pattern="[0-9]{7}"
+                                   placeholder="Preenchido pelo CEP"
+                                   class="w-full rounded-md border-gray-300 text-sm bg-gray-50 font-mono"
+                                   title="Código IBGE do município (7 dígitos). Necessário para emitir NFS-e.">
+                            <p class="mt-1 text-[11px] text-gray-400">Obrigatório para NFS-e. Preenchido ao buscar o CEP.</p>
                         </div>
                     </div>
                 </div>

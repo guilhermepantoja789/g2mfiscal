@@ -72,7 +72,12 @@ class NotaFiscalController extends Controller
         $servicos = Servico::where('empresa_id', $empresaId)->orderBy('nome')->get();
         $clientes = Cliente::where('empresa_id', $empresaId)->orderBy('razao_social')->get();
         $indOps = IndOp::query()->where('ativo', true)->orderBy('codigo')->get();
-        $classTribs = ClassTrib::query()->where('ativo', true)->orderBy('cst')->orderBy('c_class_trib')->get();
+        $classTribs = ClassTrib::query()
+            ->where('ativo', true)
+            ->orderByDesc('destaque')
+            ->orderBy('cst')
+            ->orderBy('c_class_trib')
+            ->get();
 
         return view('notas.criar', compact('servicos', 'clientes', 'indOps', 'classTribs'));
     }
@@ -88,19 +93,7 @@ class NotaFiscalController extends Controller
         DB::beginTransaction();
 
         try {
-            // 3. Lógica de Cliente (Busca ou Cria)
-            $clienteId = $request->cliente_id;
-            if (!$clienteId) {
-                $cliente = Cliente::updateOrCreate(
-                    ['empresa_id' => $empresaId, 'cnpj' => $data['tomador_cnpj']],
-                    [
-                        'razao_social' => $data['tomador_nome'],
-                        'email' => $data['tomador_email'] ?? null,
-                        // Se tiver endereço no form, adicione aqui
-                    ]
-                );
-                $clienteId = $cliente->id;
-            }
+            $clienteId = $this->syncClienteFromTomador($empresaId, $request->cliente_id, $data);
 
             // 4. Criação da Nota (Rascunho)
             $nota = NotaFiscal::create([
@@ -193,7 +186,12 @@ class NotaFiscalController extends Controller
         $servicos = Servico::where('empresa_id', $empresaId)->orderBy('nome')->get();
         $clientes = Cliente::where('empresa_id', $empresaId)->orderBy('razao_social')->get();
         $indOps = IndOp::query()->where('ativo', true)->orderBy('codigo')->get();
-        $classTribs = ClassTrib::query()->where('ativo', true)->orderBy('cst')->orderBy('c_class_trib')->get();
+        $classTribs = ClassTrib::query()
+            ->where('ativo', true)
+            ->orderByDesc('destaque')
+            ->orderBy('cst')
+            ->orderBy('c_class_trib')
+            ->get();
 
         return view('notas.editar', compact('nota', 'servicos', 'clientes', 'indOps', 'classTribs'));
     }
@@ -216,20 +214,7 @@ class NotaFiscalController extends Controller
         DB::beginTransaction();
 
         try {
-            // 4. Lógica de Cliente (Atualiza ou Cria se mudou o CNPJ)
-            $clienteId = $request->cliente_id;
-
-            // Se usuário limpou o select e digitou CNPJ, busca ou cria
-            if (!$clienteId && $data['tomador_cnpj']) {
-                $cliente = Cliente::updateOrCreate(
-                    ['empresa_id' => $empresaId, 'cnpj' => $data['tomador_cnpj']],
-                    [
-                        'razao_social' => $data['tomador_nome'],
-                        'email' => $data['tomador_email'] ?? null,
-                    ]
-                );
-                $clienteId = $cliente->id;
-            }
+            $clienteId = $this->syncClienteFromTomador($empresaId, $request->cliente_id, $data);
 
             // 5. Atualiza a Nota
             $nota->update([
@@ -325,10 +310,17 @@ class NotaFiscalController extends Controller
 
         // Pega códigos do cadastro do serviço
         $codMun = $nota->servico->codigo_tributacao_municipal; // Ex: 100
-        $codNbs = $nota->servico->codigo_tributacao_nacional;  // Ex: 010601
+        $codTribNac = $nota->servico->codigo_tributacao_nacional; // Ex: 010601 (cTribNac)
+        $codCnbs = \App\Services\NfseEmitPayloadBuilder::normalizeCnbs($nota->servico->codigo_nbs);
 
-        if (empty($codMun) || empty($codNbs)) {
-            return back()->withErrors(['erro' => 'O serviço selecionado não possui código NBS ou Municipal configurado.']);
+        if (empty($codMun) || empty($codTribNac)) {
+            return back()->withErrors(['erro' => 'O serviço selecionado não possui código de tributação nacional ou municipal configurado.']);
+        }
+
+        if ($codCnbs === null) {
+            return back()->withErrors([
+                'erro' => 'O serviço selecionado não possui código NBS (cNBS) válido. Com IBS/CBS é obrigatório informar o item da NBS (9 dígitos). Atualize o cadastro do serviço.',
+            ]);
         }
 
         try {
@@ -581,7 +573,7 @@ class NotaFiscalController extends Controller
         $dadosServico = (object) [
             'nome' => $nota->servico?->nome ?? '',
             'discriminacao' => $nota->descricao,
-            'codigo_nbs' => $nota->servico?->codigo_nbs ?? ($nota->servico?->codigo_tributacao_nacional ?? ''),
+            'codigo_nbs' => $nota->servico?->codigo_nbs ?? '',
             'item_lista_servico' => $nota->servico?->codigo_tributacao_municipal ?? '',
             'valor_servico' => $valorServico,
             'valor_deducoes' => 0.00,
@@ -699,5 +691,51 @@ class NotaFiscalController extends Controller
         $nota->delete();
 
         return redirect()->route('notas.index')->with('success', 'Nota apagada com sucesso!');
+    }
+
+    /**
+     * Cria/atualiza o cliente com os dados do tomador do formulário (endereço incluso).
+     * A emissão NFS-e lê endereço de Cliente, não dos campos avulsos da nota.
+     */
+    private function syncClienteFromTomador(int|string $empresaId, mixed $clienteId, array $data): ?int
+    {
+        $cnpj = preg_replace('/\D/', '', (string) ($data['tomador_cnpj'] ?? ''));
+        if ($cnpj === '') {
+            return $clienteId ? (int) $clienteId : null;
+        }
+
+        $payload = [
+            'razao_social' => $data['tomador_nome'] ?? null,
+            'email' => $data['tomador_email'] ?? null,
+            'inscricao_municipal' => $data['tomador_im'] ?? null,
+            'telefone' => $data['tomador_telefone'] ?? null,
+            'cep' => $data['tomador_cep'] ?? null,
+            'logradouro' => $data['tomador_endereco'] ?? null,
+            'numero' => $data['tomador_numero'] ?? null,
+            'complemento' => $data['tomador_complemento'] ?? null,
+            'bairro' => $data['tomador_bairro'] ?? null,
+            'cidade_codigo' => $data['tomador_cidade'] ?? null,
+            'uf' => $data['tomador_uf'] ?? null,
+        ];
+
+        if ($clienteId) {
+            $cliente = Cliente::where('empresa_id', $empresaId)->find($clienteId);
+            if ($cliente) {
+                $cliente->fill($payload);
+                if (empty($cliente->cnpj)) {
+                    $cliente->cnpj = $cnpj;
+                }
+                $cliente->save();
+
+                return (int) $cliente->id;
+            }
+        }
+
+        $cliente = Cliente::updateOrCreate(
+            ['empresa_id' => $empresaId, 'cnpj' => $cnpj],
+            $payload
+        );
+
+        return (int) $cliente->id;
     }
 }

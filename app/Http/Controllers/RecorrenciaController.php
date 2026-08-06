@@ -150,16 +150,41 @@ class RecorrenciaController extends Controller
 
         // Lógica de Cliente
         $clienteId = $request->cliente_id;
-        if (!$clienteId && $data['tomador_cnpj']) {
+        if (!$clienteId && !empty($data['tomador_cnpj'])) {
             $cliente = Cliente::updateOrCreate(
-                ['empresa_id' => $empresaId, 'documento' => $data['tomador_cnpj']],
+                ['empresa_id' => $empresaId, 'cnpj' => $data['tomador_cnpj']],
                 [
                     'razao_social' => $data['tomador_nome'],
                     'email' => $data['tomador_email'] ?? null,
-                    'endereco' => $data['tomador_endereco'] ?? null
+                    'inscricao_municipal' => $data['tomador_im'] ?? null,
+                    'telefone' => $data['tomador_telefone'] ?? null,
+                    'cep' => $data['tomador_cep'] ?? null,
+                    'logradouro' => $data['tomador_endereco'] ?? null,
+                    'numero' => $data['tomador_numero'] ?? null,
+                    'complemento' => $data['tomador_complemento'] ?? null,
+                    'bairro' => $data['tomador_bairro'] ?? null,
+                    'cidade_codigo' => $data['tomador_cidade'] ?? null,
+                    'uf' => $data['tomador_uf'] ?? null,
                 ]
             );
             $clienteId = $cliente->id;
+        } elseif ($clienteId) {
+            $cliente = Cliente::where('empresa_id', $empresaId)->find($clienteId);
+            if ($cliente) {
+                $cliente->update([
+                    'razao_social' => $data['tomador_nome'] ?? $cliente->razao_social,
+                    'email' => $data['tomador_email'] ?? $cliente->email,
+                    'inscricao_municipal' => $data['tomador_im'] ?? $cliente->inscricao_municipal,
+                    'telefone' => $data['tomador_telefone'] ?? $cliente->telefone,
+                    'cep' => $data['tomador_cep'] ?? $cliente->cep,
+                    'logradouro' => $data['tomador_endereco'] ?? $cliente->logradouro,
+                    'numero' => $data['tomador_numero'] ?? $cliente->numero,
+                    'complemento' => $data['tomador_complemento'] ?? $cliente->complemento,
+                    'bairro' => $data['tomador_bairro'] ?? $cliente->bairro,
+                    'cidade_codigo' => $data['tomador_cidade'] ?? $cliente->cidade_codigo,
+                    'uf' => $data['tomador_uf'] ?? $cliente->uf,
+                ]);
+            }
         }
 
         // Salvar Recorrência (CORRIGIDO: INCLUINDO TODOS OS CAMPOS)
@@ -183,6 +208,7 @@ class RecorrenciaController extends Controller
             'tomador_cep' => $data['tomador_cep'] ?? null,
             'tomador_endereco' => $data['tomador_endereco'] ?? null,
             'tomador_numero' => $data['tomador_numero'] ?? null,
+            'tomador_complemento' => $data['tomador_complemento'] ?? null,
             'tomador_bairro' => $data['tomador_bairro'] ?? null,
             'tomador_cidade' => $data['tomador_cidade'] ?? null,
             'tomador_uf' => $data['tomador_uf'] ?? null,
@@ -239,7 +265,8 @@ class RecorrenciaController extends Controller
         $request->replace($data);
 
         $recorrencia->update([
-            'cliente_id' => $request->cliente_id, // AGORA SALVA CORRETAMENTE O VÍNCULO
+            'cliente_id' => $request->cliente_id,
+            'servico_id' => $request->servico_id,
             'descricao_recorrencia' => $request->descricao_recorrencia,
             'frequencia' => $request->frequencia,
             'proxima_execucao' => $request->proxima_execucao,
@@ -256,6 +283,7 @@ class RecorrenciaController extends Controller
             'tomador_cep' => $data['tomador_cep'] ?? null,
             'tomador_endereco' => $data['tomador_endereco'] ?? null,
             'tomador_numero' => $data['tomador_numero'] ?? null,
+            'tomador_complemento' => $data['tomador_complemento'] ?? null,
             'tomador_bairro' => $data['tomador_bairro'] ?? null,
             'tomador_cidade' => $data['tomador_cidade'] ?? null, // Codigo IBGE
             'tomador_uf' => $data['tomador_uf'] ?? null,

@@ -139,7 +139,10 @@
     @push('scripts')
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script>
-            document.addEventListener('DOMContentLoaded', function () {
+            g2mPageInit('documentos-dashboard', function () {
+                const __guard = document.getElementById('vendasChart');
+                if (!__guard || typeof Chart === 'undefined') return;
+                document.querySelectorAll('canvas').forEach(c => { try { Chart.getChart(c)?.destroy(); } catch (e) {} });
                 new Chart(document.getElementById('vendasChart'), {
                     type: 'line',
                     data: {

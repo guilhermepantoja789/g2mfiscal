@@ -62,8 +62,9 @@ jobs:
           
           php artisan storage:link
           
-          # Executa seeders
+          # Executa seeders de catálogos fiscais NFS-e
           php artisan db:seed --class=TributacaoNacionalSeeder --force
+          php artisan nfse:seed-ibscbs
           
           # Recria o link simbólico do public (usando -snf para repor caso já exista)
           ln -snf ~/g2mfiscal_core/public/ ~/public_html/fiscal/

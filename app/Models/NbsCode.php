@@ -4,23 +4,20 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class ClassTrib extends Model
+class NbsCode extends Model
 {
     protected $fillable = [
-        'cst',
-        'c_class_trib',
+        'codigo',
         'descricao',
         'ativo',
-        'destaque',
     ];
 
     protected $casts = [
         'ativo' => 'boolean',
-        'destaque' => 'boolean',
     ];
 
     public function getLabelAttribute(): string
     {
-        return "{$this->cst}/{$this->c_class_trib} — {$this->descricao}";
+        return "{$this->codigo} — {$this->descricao}";
     }
 }

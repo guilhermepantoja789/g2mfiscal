@@ -74,7 +74,10 @@
     @push('scripts')
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script>
-            document.addEventListener('DOMContentLoaded', function () {
+            g2mPageInit('nfces-dashboard', function () {
+                const __guard = document.getElementById('nfceChart');
+                if (!__guard || typeof Chart === 'undefined') return;
+                document.querySelectorAll('canvas').forEach(c => { try { Chart.getChart(c)?.destroy(); } catch (e) {} });
                 new Chart(document.getElementById('nfceChart'), {
                     type: 'line',
                     data: {

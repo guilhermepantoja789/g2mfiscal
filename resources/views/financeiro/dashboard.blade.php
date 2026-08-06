@@ -75,7 +75,10 @@
     @push('scripts')
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script>
-            document.addEventListener('DOMContentLoaded', function () {
+            g2mPageInit('financeiro-dashboard', function () {
+                const __guard = document.getElementById('baixasChart');
+                if (!__guard || typeof Chart === 'undefined') return;
+                document.querySelectorAll('canvas').forEach(c => { try { Chart.getChart(c)?.destroy(); } catch (e) {} });
                 const labels = @json($stats['grafico_labels']);
                 const valores = @json($stats['grafico_valores']);
                 const formas = @json($stats['por_forma']);

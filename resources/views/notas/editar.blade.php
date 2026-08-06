@@ -42,7 +42,7 @@
                             <option value="">-- Manter atual ou Selecionar --</option>
                             @foreach($clientes as $cliente)
                                 <option value="{{ $cliente->id }}"
-                                        data-cnpj="{{ $cliente->documento }}"
+                                        data-cnpj="{{ $cliente->cnpj }}"
                                         data-nome="{{ $cliente->razao_social }}"
                                         data-email="{{ $cliente->email }}"
                                         data-telefone="{{ $cliente->telefone }}"
@@ -84,13 +84,13 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Telefone</label>
                         <input type="text" name="tomador_telefone" id="tomador_telefone"
-                               value="{{ old('tomador_telefone', $nota->cliente->telefone ?? '') }}"
+                               value="{{ old('tomador_telefone', $nota->cliente?->telefone ?? '') }}"
                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Inscrição Municipal</label>
                         <input type="text" name="tomador_im" id="tomador_im"
-                               value="{{ old('tomador_im', $nota->cliente->inscricao_municipal ?? '') }}"
+                               value="{{ old('tomador_im', $nota->cliente?->inscricao_municipal ?? '') }}"
                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                     </div>
                 </div>
@@ -100,37 +100,43 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700">CEP</label>
                             <input type="text" name="tomador_cep" id="tomador_cep"
-                                   value="{{ old('tomador_cep', $nota->cliente->cep ?? '') }}"
+                                   value="{{ old('tomador_cep', $nota->cliente?->cep ?? '') }}"
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                         </div>
                         <div class="md:col-span-3">
                             <label class="block text-sm font-medium text-gray-700">Endereço</label>
                             <input type="text" name="tomador_endereco" id="tomador_endereco"
-                                   value="{{ old('tomador_endereco', $nota->cliente->logradouro ?? '') }}"
+                                   value="{{ old('tomador_endereco', $nota->cliente?->logradouro ?? '') }}"
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Número</label>
                             <input type="text" name="tomador_numero" id="tomador_numero"
-                                   value="{{ old('tomador_numero', $nota->cliente->numero ?? '') }}"
+                                   value="{{ old('tomador_numero', $nota->cliente?->numero ?? '') }}"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Complemento</label>
+                            <input type="text" name="tomador_complemento" id="tomador_complemento"
+                                   value="{{ old('tomador_complemento', $nota->cliente?->complemento ?? '') }}"
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Bairro</label>
                             <input type="text" name="tomador_bairro" id="tomador_bairro"
-                                   value="{{ old('tomador_bairro', $nota->cliente->bairro ?? '') }}"
+                                   value="{{ old('tomador_bairro', $nota->cliente?->bairro ?? '') }}"
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Cidade (IBGE)</label>
                             <input type="text" name="tomador_cidade" id="tomador_cidade"
-                                   value="{{ old('tomador_cidade', $nota->cliente->cidade_codigo ?? '') }}"
+                                   value="{{ old('tomador_cidade', $nota->cliente?->cidade_codigo ?? '') }}"
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">UF</label>
                             <input type="text" name="tomador_uf" id="tomador_uf" maxlength="2"
-                                   value="{{ old('tomador_uf', $nota->cliente->uf ?? '') }}"
+                                   value="{{ old('tomador_uf', $nota->cliente?->uf ?? '') }}"
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-center uppercase">
                         </div>
                     </div>
@@ -155,11 +161,13 @@
                         @foreach($servicos as $servico)
                             <option value="{{ $servico->id }}"
                                     data-valor="{{ number_format($servico->valor_unitario, 2, ',', '.') }}"
-                                    data-descricao="{{ $servico->descricao }}"
+                                    data-descricao="{{ preg_replace('/\s+/u', ' ', $servico->descricao ?? '') }}"
                                     data-c-ind-op="{{ $servico->c_ind_op }}"
                                     data-cst="{{ $servico->cst_ibscbs }}"
                                     data-c-class-trib="{{ $servico->c_class_trib }}"
                                     data-fin-nfse="{{ $servico->fin_nfse ?? '0' }}"
+                                    data-codigo-nbs="{{ $servico->codigo_nbs }}"
+                                    data-edit-url="{{ route('servicos.edit', $servico->id) }}"
                                 {{ (old('servico_id', $nota->servico_id) == $servico->id) ? 'selected' : '' }}>
                                 {{ $servico->nome }}
                             </option>
@@ -205,8 +213,9 @@
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4 mt-4 border-t border-gray-200 pt-4">
+                    @include('notas.partials.ibscbs-checklist')
                     <div class="md:col-span-2">
-                        <h4 class="text-sm font-bold text-indigo-800 mb-2">IBS/CBS (Reforma)</h4>
+                        <h4 class="text-sm font-bold text-indigo-800 mb-2">IBS/CBS (overrides opcionais)</h4>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">cIndOp</label>
@@ -312,13 +321,13 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        g2mPageInit('notas-editar', function () {
+            const selectCliente = document.getElementById('select_cliente');
+            const servicoSelect = document.getElementById('servico_select');
+            if (!selectCliente || !servicoSelect) return;
 
-            // ==========================================
-            // 1. UTILITÁRIOS (MÁSCARAS E CALCULOS)
-            // ==========================================
             function maskMoney(val) {
-                if(!val) return '';
+                if (!val) return '';
                 val = val.replace(/\D/g, '');
                 val = (val / 100).toFixed(2) + '';
                 val = val.replace('.', ',');
@@ -327,7 +336,7 @@
             }
 
             function getFloat(val) {
-                if(!val) return 0;
+                if (!val) return 0;
                 return parseFloat(val.replace(/\./g, '').replace(',', '.')) || 0;
             }
 
@@ -335,25 +344,18 @@
                 return val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             }
 
-            // Aplica Máscara Dinheiro ao digitar
-            const moneyInputs = document.querySelectorAll('.money');
-            moneyInputs.forEach(input => {
-                input.addEventListener('input', e => { e.target.value = maskMoney(e.target.value); });
-                // Formata valor inicial se houver
-                if(input.value) input.value = maskMoney(input.value.replace('.', ''));
+            document.querySelectorAll('.money').forEach(input => {
+                input.oninput = e => { e.target.value = maskMoney(e.target.value); };
+                if (input.value) input.value = maskMoney(input.value.replace('.', ''));
             });
 
-            // ==========================================
-            // 2. LÓGICA DE DESCRIÇÃO INTELIGENTE
-            // ==========================================
-            const servicoSelect = document.getElementById('servico_select');
             const descricaoInput = document.getElementById('descricao');
             const emissaoInput = document.querySelector('input[name="emissao"]');
 
             function processarDescricao(template) {
                 if (!template) return '';
 
-                let data = new Date(emissaoInput.value);
+                let data = new Date(emissaoInput?.value);
                 if (isNaN(data.getTime())) data = new Date();
 
                 const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -378,89 +380,130 @@
                 return texto;
             }
 
-            // Evento: Ao Selecionar Serviço
-            servicoSelect.addEventListener('change', function() {
+            servicoSelect.onchange = function () {
                 const opt = this.options[this.selectedIndex];
-                if (opt.value) {
-                    document.getElementById('valor_servico').value = opt.getAttribute('data-valor');
-                    document.getElementById('valor_servico').dispatchEvent(new Event('input'));
+                if (!opt.value) return;
 
-                    const templateDescricao = opt.getAttribute('data-descricao');
-                    // Pergunta se quer sobrescrever a descrição atual se já tiver texto
-                    if(descricaoInput.value.trim() !== '' && descricaoInput.value !== templateDescricao) {
-                        if(confirm('Deseja substituir a descrição atual pela descrição padrão do serviço?')) {
+                const valorEl = document.getElementById('valor_servico');
+                valorEl.value = opt.getAttribute('data-valor') || '';
+                valorEl.dispatchEvent(new Event('input'));
+
+                const templateDescricao = opt.getAttribute('data-descricao');
+                if (descricaoInput) {
+                    if (descricaoInput.value.trim() !== '' && descricaoInput.value !== templateDescricao) {
+                        if (confirm('Deseja substituir a descrição atual pela descrição padrão do serviço?')) {
                             descricaoInput.value = processarDescricao(templateDescricao);
                         }
                     } else {
                         descricaoInput.value = processarDescricao(templateDescricao);
                     }
-
-                    const cIndOp = opt.getAttribute('data-c-ind-op') || '';
-                    const cst = opt.getAttribute('data-cst') || '';
-                    const cClass = opt.getAttribute('data-c-class-trib') || '';
-                    const fin = opt.getAttribute('data-fin-nfse') || '0';
-                    const cIndEl = document.getElementById('c_ind_op');
-                    if (cIndEl && cIndOp) cIndEl.value = cIndOp;
-                    const cstEl = document.getElementById('cst_ibscbs');
-                    const classEl = document.getElementById('c_class_trib');
-                    const pairEl = document.getElementById('nota_class_trib_pair');
-                    if (cstEl) cstEl.value = cst;
-                    if (classEl) classEl.value = cClass;
-                    if (pairEl && cst && cClass) pairEl.value = cst + '|' + cClass;
-                    const finEl = document.getElementById('fin_nfse');
-                    if (finEl) finEl.value = fin;
                 }
-            });
 
-            // ==========================================
-            // 3. PREENCHIMENTO CLIENTE
-            // ==========================================
-            document.getElementById('select_cliente').addEventListener('change', function() {
+                const cIndOp = opt.getAttribute('data-c-ind-op') || '';
+                const cst = opt.getAttribute('data-cst') || '';
+                const cClass = opt.getAttribute('data-c-class-trib') || '';
+                const fin = opt.getAttribute('data-fin-nfse') || '0';
+                const cIndEl = document.getElementById('c_ind_op');
+                if (cIndEl && cIndOp) cIndEl.value = cIndOp;
+                const cstEl = document.getElementById('cst_ibscbs');
+                const classEl = document.getElementById('c_class_trib');
+                const pairEl = document.getElementById('nota_class_trib_pair');
+                if (cstEl) cstEl.value = cst;
+                if (classEl) classEl.value = cClass;
+                if (pairEl && cst && cClass) pairEl.value = cst + '|' + cClass;
+                const finEl = document.getElementById('fin_nfse');
+                if (finEl) finEl.value = fin;
+                updateNbsChecklist(opt);
+            };
+
+            function updateNbsChecklist(opt) {
+                const box = document.getElementById('nbs-checklist');
+                const msg = document.getElementById('nbs-checklist-msg');
+                const link = document.getElementById('nbs-checklist-link');
+                if (!box || !msg) return;
+                const ok = box.getAttribute('data-ok-class');
+                const warn = box.getAttribute('data-warn-class');
+                box.className = 'rounded-md border px-3 py-2 text-sm';
+                if (!opt || !opt.value) {
+                    box.className += ' border-gray-200 bg-gray-50 text-gray-700';
+                    msg.textContent = 'Selecione um serviço do catálogo para validar o cNBS.';
+                    if (link) link.classList.add('hidden');
+                    return;
+                }
+                const nbs = (opt.getAttribute('data-codigo-nbs') || '').replace(/\D/g, '');
+                const editUrl = opt.getAttribute('data-edit-url') || '#';
+                if (nbs.length === 9) {
+                    box.className += ' ' + ok;
+                    msg.textContent = 'cNBS do serviço: ' + nbs + ' — ok para emissão com IBS/CBS.';
+                    if (link) link.classList.add('hidden');
+                } else {
+                    box.className += ' ' + warn;
+                    msg.textContent = 'Serviço sem cNBS válido (9 dígitos). Edite o serviço antes de emitir.';
+                    if (link) {
+                        link.href = editUrl;
+                        link.classList.remove('hidden');
+                    }
+                }
+            }
+
+            if (servicoSelect.selectedIndex > 0) {
+                updateNbsChecklist(servicoSelect.options[servicoSelect.selectedIndex]);
+            }
+
+            selectCliente.onchange = function () {
                 const opt = this.options[this.selectedIndex];
-                if (opt.value) {
-                    const setVal = (id, attr) => {
-                        const el = document.getElementById(id);
-                        if(el) el.value = opt.getAttribute(attr) || '';
-                    };
-                    setVal('tomador_cnpj', 'data-cnpj');
-                    setVal('tomador_nome', 'data-nome');
-                    setVal('tomador_email', 'data-email');
-                    setVal('tomador_telefone', 'data-telefone');
-                    setVal('tomador_im', 'data-im');
-                    setVal('tomador_cep', 'data-cep');
-                    setVal('tomador_endereco', 'data-endereco');
-                    setVal('tomador_numero', 'data-numero');
-                    setVal('tomador_complemento', 'data-complemento');
-                    setVal('tomador_bairro', 'data-bairro');
-                    setVal('tomador_cidade', 'data-cidade');
-                    setVal('tomador_uf', 'data-uf');
-                }
-            });
+                if (!opt.value) return;
+                const setVal = (id, attr) => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = opt.getAttribute(attr) || '';
+                };
+                setVal('tomador_cnpj', 'data-cnpj');
+                setVal('tomador_nome', 'data-nome');
+                setVal('tomador_email', 'data-email');
+                setVal('tomador_telefone', 'data-telefone');
+                setVal('tomador_im', 'data-im');
+                setVal('tomador_cep', 'data-cep');
+                setVal('tomador_endereco', 'data-endereco');
+                setVal('tomador_numero', 'data-numero');
+                setVal('tomador_complemento', 'data-complemento');
+                setVal('tomador_bairro', 'data-bairro');
+                setVal('tomador_cidade', 'data-cidade');
+                setVal('tomador_uf', 'data-uf');
+            };
 
-            // ==========================================
-            // 4. CÁLCULO IMPOSTOS
-            // ==========================================
             const inputValorServico = document.getElementById('valor_servico');
 
             document.querySelectorAll('.calc-tax-percent').forEach(input => {
-                input.addEventListener('change', function() {
-                    const targetId = this.getAttribute('data-target');
-                    const targetInput = document.getElementById(targetId);
+                input.onchange = function () {
+                    const targetInput = document.getElementById(this.getAttribute('data-target'));
                     const valorServico = getFloat(inputValorServico.value);
                     const percent = getFloat(this.value);
-                    if (valorServico > 0) targetInput.value = formatFloat((valorServico * percent) / 100);
-                });
+                    if (targetInput && valorServico > 0) {
+                        targetInput.value = formatFloat((valorServico * percent) / 100);
+                    }
+                };
             });
 
             document.querySelectorAll('.calc-tax-value').forEach(input => {
-                input.addEventListener('change', function() {
-                    const targetId = this.getAttribute('data-target');
-                    const targetInput = document.getElementById(targetId);
+                input.onchange = function () {
+                    const targetInput = document.getElementById(this.getAttribute('data-target'));
                     const valorServico = getFloat(inputValorServico.value);
                     const valorImposto = getFloat(this.value);
-                    if (valorServico > 0) targetInput.value = formatFloat((valorImposto / valorServico) * 100);
-                });
+                    if (targetInput && valorServico > 0) {
+                        targetInput.value = formatFloat((valorImposto / valorServico) * 100);
+                    }
+                };
             });
+
+            if (inputValorServico) {
+                inputValorServico.addEventListener('input', function () {
+                    if (getFloat(this.value) > 0) {
+                        document.querySelectorAll('.calc-tax-percent').forEach(el => {
+                            if (getFloat(el.value) > 0) el.dispatchEvent(new Event('change'));
+                        });
+                    }
+                });
+            }
         });
     </script>
     </x-app-layout>

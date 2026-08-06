@@ -105,6 +105,11 @@
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                         </div>
                         <div>
+                            <label class="block text-sm font-medium text-gray-700">Complemento</label>
+                            <input type="text" name="tomador_complemento" id="tomador_complemento" value="{{ old('tomador_complemento') }}"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                        </div>
+                        <div>
                             <label class="block text-sm font-medium text-gray-700">Bairro</label>
                             <input type="text" name="tomador_bairro" id="tomador_bairro" value="{{ old('tomador_bairro') }}"
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
@@ -139,11 +144,13 @@
                         @foreach($servicos as $servico)
                             <option value="{{ $servico->id }}"
                                     data-valor="{{ number_format($servico->valor_unitario, 2, ',', '.') }}"
-                                    data-descricao="{{ $servico->descricao }}"
+                                    data-descricao="{{ preg_replace('/\s+/u', ' ', $servico->descricao ?? '') }}"
                                     data-c-ind-op="{{ $servico->c_ind_op }}"
                                     data-cst="{{ $servico->cst_ibscbs }}"
                                     data-c-class-trib="{{ $servico->c_class_trib }}"
-                                    data-fin-nfse="{{ $servico->fin_nfse ?? '0' }}">
+                                    data-fin-nfse="{{ $servico->fin_nfse ?? '0' }}"
+                                    data-codigo-nbs="{{ $servico->codigo_nbs }}"
+                                    data-edit-url="{{ route('servicos.edit', $servico->id) }}">
                                 {{ $servico->nome }}
                             </option>
                         @endforeach
@@ -187,8 +194,9 @@
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4 mt-4 border-t border-gray-200 pt-4">
+                    @include('notas.partials.ibscbs-checklist')
                     <div class="md:col-span-2">
-                        <h4 class="text-sm font-bold text-indigo-800 mb-2">IBS/CBS (Reforma)</h4>
+                        <h4 class="text-sm font-bold text-indigo-800 mb-2">IBS/CBS (overrides opcionais)</h4>
                         <p class="text-xs text-gray-500 mb-3">Preenchidos automaticamente pelo serviço; ajuste se necessário.</p>
                     </div>
                     <div>
@@ -321,13 +329,13 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        g2mPageInit('notas-criar', function () {
+            const selectCliente = document.getElementById('select_cliente');
+            const servicoSelect = document.getElementById('servico_select');
+            if (!selectCliente || !servicoSelect) return;
 
-            // ==========================================
-            // 1. UTILITÁRIOS (MÁSCARAS E CALCULOS)
-            // ==========================================
             function maskMoney(val) {
-                if(!val) return '';
+                if (!val) return '';
                 val = val.replace(/\D/g, '');
                 val = (val / 100).toFixed(2) + '';
                 val = val.replace('.', ',');
@@ -336,7 +344,7 @@
             }
 
             function getFloat(val) {
-                if(!val) return 0;
+                if (!val) return 0;
                 return parseFloat(val.replace(/\./g, '').replace(',', '.')) || 0;
             }
 
@@ -344,48 +352,34 @@
                 return val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             }
 
-            // Aplica Máscara Dinheiro
-            const moneyInputs = document.querySelectorAll('.money');
-            moneyInputs.forEach(input => {
-                input.addEventListener('input', e => { e.target.value = maskMoney(e.target.value); });
-                if(input.value) input.value = maskMoney(input.value.replace('.', ''));
+            document.querySelectorAll('.money').forEach(input => {
+                input.oninput = e => { e.target.value = maskMoney(e.target.value); };
+                if (input.value) input.value = maskMoney(input.value.replace('.', ''));
             });
 
-            // ==========================================
-            // 2. LÓGICA DE DESCRIÇÃO INTELIGENTE (NOVO)
-            // ==========================================
-            const servicoSelect = document.getElementById('servico_select');
             const descricaoInput = document.getElementById('descricao');
-            const emissaoInput = document.querySelector('input[name="emissao"]'); // Campo Data Competência
+            const emissaoInput = document.querySelector('input[name="emissao"]');
 
             function processarDescricao(template) {
                 if (!template) return '';
 
-                // 1. Pega a data de competência selecionada
-                let data = new Date(emissaoInput.value);
-                if (isNaN(data.getTime())) data = new Date(); // Fallback para hoje se inválida
+                let data = new Date(emissaoInput?.value);
+                if (isNaN(data.getTime())) data = new Date();
 
                 const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-                // 2. Substitui as Tags de Data
                 let texto = template
                     .replace(/{DIA}/g, String(data.getDate()).padStart(2, '0'))
                     .replace(/{MES}/g, String(data.getMonth() + 1).padStart(2, '0'))
                     .replace(/{ANO}/g, data.getFullYear())
                     .replace(/{MES_EXTENSO}/g, meses[data.getMonth()])
-                    .replace(/{MES_ANTERIOR}/g, meses[data.getMonth() === 0 ? 11 : data.getMonth() - 1]); // Trata Janeiro -> Dezembro
+                    .replace(/{MES_ANTERIOR}/g, meses[data.getMonth() === 0 ? 11 : data.getMonth() - 1]);
 
-                // 3. Substitui Tags Interativas [VARIAVEL]
-                // Procura por qualquer coisa entre colchetes ex: [PARCELA] ou [PROJETO]
                 const regexVariaveis = /\[(.*?)\]/g;
                 let match;
-
-                // Usamos um loop para perguntar pro usuário
-                // Nota: O prompt bloqueia a execução, o que é útil aqui para obrigar o preenchimento
                 while ((match = regexVariaveis.exec(texto)) !== null) {
-                    const tagCompleta = match[0]; // ex: [NUMERO_PARCELA]
-                    const nomeVariavel = match[1]; // ex: NUMERO_PARCELA
-
+                    const tagCompleta = match[0];
+                    const nomeVariavel = match[1];
                     const valorUsuario = prompt(`Preencha o valor para ${nomeVariavel}:`, "");
                     if (valorUsuario !== null) {
                         texto = texto.replace(tagCompleta, valorUsuario);
@@ -395,111 +389,124 @@
                 return texto;
             }
 
-            // Evento: Ao Selecionar Serviço
-            servicoSelect.addEventListener('change', function() {
+            servicoSelect.onchange = function () {
                 const opt = this.options[this.selectedIndex];
-                if (opt.value) {
-                    // Preenche Valor
-                    document.getElementById('valor_servico').value = opt.getAttribute('data-valor');
-                    document.getElementById('valor_servico').dispatchEvent(new Event('input')); // Dispara máscara
+                if (!opt.value) return;
 
-                    // Preenche Descrição Inteligente
-                    const templateDescricao = opt.getAttribute('data-descricao');
-                    descricaoInput.value = processarDescricao(templateDescricao);
+                const valorEl = document.getElementById('valor_servico');
+                valorEl.value = opt.getAttribute('data-valor') || '';
+                valorEl.dispatchEvent(new Event('input'));
 
-                    const cIndOp = opt.getAttribute('data-c-ind-op') || '';
-                    const cst = opt.getAttribute('data-cst') || '';
-                    const cClass = opt.getAttribute('data-c-class-trib') || '';
-                    const fin = opt.getAttribute('data-fin-nfse') || '0';
-                    const cIndEl = document.getElementById('c_ind_op');
-                    if (cIndEl && cIndOp) cIndEl.value = cIndOp;
-                    const cstEl = document.getElementById('cst_ibscbs');
-                    const classEl = document.getElementById('c_class_trib');
-                    const pairEl = document.getElementById('nota_class_trib_pair');
-                    if (cstEl) cstEl.value = cst;
-                    if (classEl) classEl.value = cClass;
-                    if (pairEl && cst && cClass) pairEl.value = cst + '|' + cClass;
-                    const finEl = document.getElementById('fin_nfse');
-                    if (finEl) finEl.value = fin;
+                if (descricaoInput) {
+                    descricaoInput.value = processarDescricao(opt.getAttribute('data-descricao'));
                 }
-            });
 
-            // Evento: Ao Mudar Data (Opcional: Atualizar se o usuário quiser)
-            // Não atualizamos automaticamente aqui para não apagar algo que o usuário já editou manualmente.
-            // Mas se quiser, pode descomentar a linha abaixo:
-            /*
-            emissaoInput.addEventListener('change', function() {
-               if(servicoSelect.value) servicoSelect.dispatchEvent(new Event('change'));
-            });
-            */
+                const cIndOp = opt.getAttribute('data-c-ind-op') || '';
+                const cst = opt.getAttribute('data-cst') || '';
+                const cClass = opt.getAttribute('data-c-class-trib') || '';
+                const fin = opt.getAttribute('data-fin-nfse') || '0';
+                const cIndEl = document.getElementById('c_ind_op');
+                if (cIndEl && cIndOp) cIndEl.value = cIndOp;
+                const cstEl = document.getElementById('cst_ibscbs');
+                const classEl = document.getElementById('c_class_trib');
+                const pairEl = document.getElementById('nota_class_trib_pair');
+                if (cstEl) cstEl.value = cst;
+                if (classEl) classEl.value = cClass;
+                if (pairEl && cst && cClass) pairEl.value = cst + '|' + cClass;
+                const finEl = document.getElementById('fin_nfse');
+                if (finEl) finEl.value = fin;
 
-            // ==========================================
-            // 3. PREENCHIMENTO CLIENTE E IMPOSTOS
-            // ==========================================
+                updateNbsChecklist(opt);
+            };
 
-            // Auto-preenchimento Cliente
-            document.getElementById('select_cliente').addEventListener('change', function() {
+            function updateNbsChecklist(opt) {
+                const box = document.getElementById('nbs-checklist');
+                const msg = document.getElementById('nbs-checklist-msg');
+                const link = document.getElementById('nbs-checklist-link');
+                if (!box || !msg) return;
+                const ok = box.getAttribute('data-ok-class');
+                const warn = box.getAttribute('data-warn-class');
+                box.className = 'rounded-md border px-3 py-2 text-sm';
+                if (!opt || !opt.value) {
+                    box.className += ' border-gray-200 bg-gray-50 text-gray-700';
+                    msg.textContent = 'Selecione um serviço do catálogo para validar o cNBS.';
+                    if (link) link.classList.add('hidden');
+                    return;
+                }
+                const nbs = (opt.getAttribute('data-codigo-nbs') || '').replace(/\D/g, '');
+                const editUrl = opt.getAttribute('data-edit-url') || '#';
+                if (nbs.length === 9) {
+                    box.className += ' ' + ok;
+                    msg.textContent = 'cNBS do serviço: ' + nbs + ' — ok para emissão com IBS/CBS.';
+                    if (link) link.classList.add('hidden');
+                } else {
+                    box.className += ' ' + warn;
+                    msg.textContent = 'Serviço sem cNBS válido (9 dígitos). Edite o serviço antes de emitir.';
+                    if (link) {
+                        link.href = editUrl;
+                        link.classList.remove('hidden');
+                    }
+                }
+            }
+
+            if (servicoSelect.selectedIndex > 0) {
+                updateNbsChecklist(servicoSelect.options[servicoSelect.selectedIndex]);
+            }
+
+            selectCliente.onchange = function () {
                 const opt = this.options[this.selectedIndex];
-                if (opt.value) {
-                    const setVal = (id, attr) => {
-                        const el = document.getElementById(id);
-                        if(el) el.value = opt.getAttribute(attr) || '';
-                    };
-                    setVal('tomador_cnpj', 'data-cnpj');
-                    setVal('tomador_nome', 'data-nome');
-                    setVal('tomador_email', 'data-email');
-                    setVal('tomador_telefone', 'data-telefone');
-                    setVal('tomador_im', 'data-im');
-                    setVal('tomador_cep', 'data-cep');
-                    setVal('tomador_endereco', 'data-endereco');
-                    setVal('tomador_numero', 'data-numero');
-                    setVal('tomador_complemento', 'data-complemento');
-                    setVal('tomador_bairro', 'data-bairro');
-                    setVal('tomador_cidade', 'data-cidade');
-                    setVal('tomador_uf', 'data-uf');
-                }
-            });
+                if (!opt.value) return;
+                const setVal = (id, attr) => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = opt.getAttribute(attr) || '';
+                };
+                setVal('tomador_cnpj', 'data-cnpj');
+                setVal('tomador_nome', 'data-nome');
+                setVal('tomador_email', 'data-email');
+                setVal('tomador_telefone', 'data-telefone');
+                setVal('tomador_im', 'data-im');
+                setVal('tomador_cep', 'data-cep');
+                setVal('tomador_endereco', 'data-endereco');
+                setVal('tomador_numero', 'data-numero');
+                setVal('tomador_complemento', 'data-complemento');
+                setVal('tomador_bairro', 'data-bairro');
+                setVal('tomador_cidade', 'data-cidade');
+                setVal('tomador_uf', 'data-uf');
+            };
 
-            // Cálculo Reverso de Impostos
             const inputValorServico = document.getElementById('valor_servico');
 
-            // % -> Valor
             document.querySelectorAll('.calc-tax-percent').forEach(input => {
-                input.addEventListener('change', function() {
-                    const targetId = this.getAttribute('data-target');
-                    const targetInput = document.getElementById(targetId);
+                input.onchange = function () {
+                    const targetInput = document.getElementById(this.getAttribute('data-target'));
                     const valorServico = getFloat(inputValorServico.value);
                     const percent = getFloat(this.value);
-
-                    if (valorServico > 0) {
+                    if (targetInput && valorServico > 0) {
                         targetInput.value = formatFloat((valorServico * percent) / 100);
                     }
-                });
+                };
             });
 
-            // Valor -> %
             document.querySelectorAll('.calc-tax-value').forEach(input => {
-                input.addEventListener('change', function() {
-                    const targetId = this.getAttribute('data-target');
-                    const targetInput = document.getElementById(targetId);
+                input.onchange = function () {
+                    const targetInput = document.getElementById(this.getAttribute('data-target'));
                     const valorServico = getFloat(inputValorServico.value);
                     const valorImposto = getFloat(this.value);
-
-                    if (valorServico > 0) {
+                    if (targetInput && valorServico > 0) {
                         targetInput.value = formatFloat((valorImposto / valorServico) * 100);
                     }
+                };
+            });
+
+            if (inputValorServico) {
+                inputValorServico.addEventListener('input', function () {
+                    if (getFloat(this.value) > 0) {
+                        document.querySelectorAll('.calc-tax-percent').forEach(el => {
+                            if (getFloat(el.value) > 0) el.dispatchEvent(new Event('change'));
+                        });
+                    }
                 });
-            });
-
-            // Recalcula impostos se o valor total mudar
-            inputValorServico.addEventListener('input', function() {
-                if(getFloat(this.value) > 0) {
-                    document.querySelectorAll('.calc-tax-percent').forEach(el => {
-                        if(getFloat(el.value) > 0) el.dispatchEvent(new Event('change'));
-                    });
-                }
-            });
-
+            }
         });
     </script>
     </x-app-layout>

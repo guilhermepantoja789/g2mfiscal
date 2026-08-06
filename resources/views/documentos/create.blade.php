@@ -105,7 +105,7 @@
                                     <option value="">Selecione / avulso</option>
                                     @foreach($produtos as $p)
                                         <option value="{{ $p->id }}"
-                                                data-desc="{{ $p->descricao }}"
+                                                data-desc="{{ preg_replace('/\s+/u', ' ', $p->descricao ?? '') }}"
                                                 data-valor="{{ $p->preco_venda }}"
                                                 data-ncm="{{ $p->ncm }}"
                                                 data-cfop="{{ $p->cfop }}"

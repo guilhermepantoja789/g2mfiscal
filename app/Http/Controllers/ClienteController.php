@@ -63,7 +63,8 @@ class ClienteController extends Controller
         // mas nossa regra CpfCnpj trata string suja, o unique do Laravel precisa de ajuda)
         $input = $request->all();
         $input['cnpj'] = preg_replace('/\D/', '', $input['cnpj']);
-        $input['cep'] = preg_replace('/\D/', '', $input['cep']);
+        $input['cep'] = preg_replace('/\D/', '', $input['cep'] ?? '');
+        $input['cidade_codigo'] = preg_replace('/\D/', '', $input['cidade_codigo'] ?? '') ?: null;
 
         // Substitui o request com dados limpos
         $request->replace($input);
@@ -72,6 +73,7 @@ class ClienteController extends Controller
             'razao_social' => 'required|string|max:255',
             'cnpj' => ['required', new CpfCnpj], // Validação Customizada
             'email' => 'nullable|email',
+            'cidade_codigo' => 'nullable|digits:7',
         ]);
 
         // Verifica duplicidade dentro da empresa manualmente para ser mais seguro
@@ -102,12 +104,14 @@ class ClienteController extends Controller
 
         $input = $request->all();
         $input['cnpj'] = preg_replace('/\D/', '', $input['cnpj']);
-        $input['cep'] = preg_replace('/\D/', '', $input['cep']);
+        $input['cep'] = preg_replace('/\D/', '', $input['cep'] ?? '');
+        $input['cidade_codigo'] = preg_replace('/\D/', '', $input['cidade_codigo'] ?? '') ?: null;
         $request->replace($input);
 
         $request->validate([
             'razao_social' => 'required|string|max:255',
             'cnpj' => ['required', new CpfCnpj],
+            'cidade_codigo' => 'nullable|digits:7',
         ]);
 
         // Verifica duplicidade (ignorando o próprio ID)

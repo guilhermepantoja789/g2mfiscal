@@ -8,19 +8,26 @@ use Illuminate\Console\Command;
 
 class SeedNfseIbscbsCommand extends Command
 {
-    protected $signature = 'nfse:seed-ibscbs {--backfill : Também preenche defaults nos serviços existentes}';
+    protected $signature = 'nfse:seed-ibscbs
+                            {--backfill : Também preenche defaults IBS/CBS nos serviços existentes (não preenche NBS)}';
 
-    protected $description = 'Importa catálogos IndOp/ClassTrib (IBS/CBS) e opcionalmente faz backfill nos serviços';
+    protected $description = 'Importa catálogos IndOp/ClassTrib/NBS/correlação (IBS/CBS) e opcionalmente faz backfill nos serviços';
 
     public function handle(): int
     {
-        $this->call(IbscbsCatalogSeeder::class);
+        $this->call('db:seed', [
+            '--class' => IbscbsCatalogSeeder::class,
+            '--force' => true,
+        ]);
 
         if ($this->option('backfill')) {
-            $this->call(BackfillServicoIbscbsSeeder::class);
+            $this->call('db:seed', [
+                '--class' => BackfillServicoIbscbsSeeder::class,
+                '--force' => true,
+            ]);
         }
 
-        $this->info('Catálogos IBS/CBS atualizados.');
+        $this->info('Catálogos IBS/CBS + NBS atualizados.');
 
         return self::SUCCESS;
     }

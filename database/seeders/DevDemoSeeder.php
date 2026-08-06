@@ -78,45 +78,57 @@ class DevDemoSeeder extends Seeder
 
         // 5. Criar Serviços (O mais importante para seu teste agora)
 
-        // Serviço 1: Desenvolvimento (Padrão)
+        // Serviço 1: Desenvolvimento (LC 01.01 → NBS 115021000)
         Servico::create([
             'empresa_id' => $empresa->id,
             'nome' => 'Desenvolvimento de Software',
             'codigo_interno' => 'DEV-001',
-            'codigo_tributacao_nacional' => '1.01', // NBS
-            'codigo_tributacao_municipal' => '1.01',
-            'codigo_nbs' => '1.01',
-            'descricao' => 'Desenvolvimento e licenciamento de programas de computador customizáveis.',
+            'codigo_tributacao_nacional' => '010101',
+            'codigo_tributacao_municipal' => '100',
+            'codigo_nbs' => '115021000',
+            'fin_nfse' => '0',
+            'c_ind_op' => '100301',
+            'cst_ibscbs' => '000',
+            'c_class_trib' => '000001',
+            'descricao' => 'Desenvolvimento e instalação de aplicativos e programas de computador.',
             'valor_unitario' => 2500.00,
             'iss_retido' => false,
             'aliquota_iss' => 2.00,
         ]);
 
-        // Serviço 2: Manutenção (Valor menor)
+        // Serviço 2: Manutenção / suporte (LC 01.07 → NBS 115013000)
         Servico::create([
             'empresa_id' => $empresa->id,
             'nome' => 'Manutenção Mensal',
             'codigo_interno' => 'SUP-002',
-            'codigo_tributacao_nacional' => '1.07',
-            'codigo_tributacao_municipal' => '1.07',
-            'codigo_nbs' => '1.07',
+            'codigo_tributacao_nacional' => '010701',
+            'codigo_tributacao_municipal' => '100',
+            'codigo_nbs' => '115013000',
+            'fin_nfse' => '0',
+            'c_ind_op' => '100301',
+            'cst_ibscbs' => '000',
+            'c_class_trib' => '000001',
             'descricao' => 'Suporte técnico e manutenção de computadores referente ao mês vigente.',
             'valor_unitario' => 350.00,
             'iss_retido' => false,
             'aliquota_iss' => 2.00,
         ]);
 
-        // Serviço 3: Consultoria (Valor alto)
+        // Serviço 3: Consultoria TI (LC 01.06 → NBS 115011000)
         Servico::create([
             'empresa_id' => $empresa->id,
             'nome' => 'Consultoria Técnica',
             'codigo_interno' => 'CONS-003',
-            'codigo_tributacao_nacional' => '17.06',
-            'codigo_tributacao_municipal' => '17.06',
-            'codigo_nbs' => '1.06', // Teste NBS diferente
-            'descricao' => 'Consultoria em gestão de processos de TI e infraestrutura.',
+            'codigo_tributacao_nacional' => '010601',
+            'codigo_tributacao_municipal' => '100',
+            'codigo_nbs' => '115011000',
+            'fin_nfse' => '0',
+            'c_ind_op' => '100301',
+            'cst_ibscbs' => '000',
+            'c_class_trib' => '000001',
+            'descricao' => 'Consultoria em tecnologia da informação e infraestrutura.',
             'valor_unitario' => 5000.00,
-            'iss_retido' => true, // Para testar lógica futura
+            'iss_retido' => true,
             'aliquota_iss' => 5.00,
         ]);
 

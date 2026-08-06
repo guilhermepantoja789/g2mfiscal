@@ -12,6 +12,24 @@
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700&display=swap" rel="stylesheet" />
 
+    {{-- Turbo-safe page inits: DOMContentLoaded does not re-fire on Drive visits --}}
+    <script>
+        window.g2mPageInit = window.g2mPageInit || function (name, fn) {
+            window.__g2mPageInits = window.__g2mPageInits || {};
+            const first = !window.__g2mPageInits[name];
+            window.__g2mPageInits[name] = fn;
+            if (first) {
+                document.addEventListener('turbo:load', function () {
+                    try {
+                        window.__g2mPageInits[name]?.();
+                    } catch (err) {
+                        console.error('[g2mPageInit:' + name + ']', err);
+                    }
+                });
+            }
+        };
+    </script>
+
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="h-full font-sans antialiased text-slate-800 {{ request()->routeIs('pdv.*') ? 'overflow-hidden' : '' }}">

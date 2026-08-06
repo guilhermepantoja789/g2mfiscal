@@ -288,6 +288,10 @@ class NfseNacionalService
 
         $cTribMun = preg_replace('/\D/', '', $dados['servico_municipal']);
 
+        // cNBS obrigatório pela RN quando há grupo IBSCBS (TSCodNBS = 9 dígitos)
+        $cNbs = NfseEmitPayloadBuilder::normalizeCnbs($dados['servico_cnbs'] ?? null);
+        $tagCnbs = $cNbs ? "<cNBS>{$cNbs}</cNBS>" : '';
+
         $valServ = number_format($dados['valor'], 2, '.', '');
         $tribISS = $dados['tributacao_iss'];
         $retISS = $dados['retencao_iss'];
@@ -335,6 +339,7 @@ class NfseNacionalService
                 <cTribNac>{$cTribNac}</cTribNac>
                 <cTribMun>{$cTribMun}</cTribMun>
                 <xDescServ>{$descServico}</xDescServ>
+                {$tagCnbs}
             </cServ>
         </serv>
         <valores>

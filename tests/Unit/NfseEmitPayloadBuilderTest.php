@@ -28,6 +28,7 @@ class NfseEmitPayloadBuilderTest extends TestCase
         $this->assertSame('99', $payload['serie']);
         $this->assertSame('RUA A', $payload['tomador_endereco']);
         $this->assertSame('010301', $payload['servico_nbs']);
+        $this->assertSame('115011000', $payload['servico_cnbs']);
         $this->assertSame('100301', $payload['c_ind_op']);
         $this->assertSame('000', $payload['cst_ibscbs']);
         $this->assertSame('000001', $payload['c_class_trib']);
@@ -62,6 +63,24 @@ class NfseEmitPayloadBuilderTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('Endereço do tomador incompleto');
         NfseEmitPayloadBuilder::fromNota($nota);
+    }
+
+    public function test_rejects_missing_cnbs(): void
+    {
+        $nota = $this->makeNota();
+        $nota->servico->update(['codigo_nbs' => null]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('código NBS');
+        NfseEmitPayloadBuilder::fromNota($nota->fresh(['cliente', 'servico']));
+    }
+
+    public function test_normalize_cnbs_accepts_masked_value(): void
+    {
+        $this->assertSame('115011000', NfseEmitPayloadBuilder::normalizeCnbs('1.1501.10.00'));
+        $this->assertSame('115011000', NfseEmitPayloadBuilder::normalizeCnbs('115011000'));
+        $this->assertNull(NfseEmitPayloadBuilder::normalizeCnbs('1.01'));
+        $this->assertNull(NfseEmitPayloadBuilder::normalizeCnbs(''));
     }
 
     private function makeNota(bool $completo = true): NotaFiscal
@@ -102,6 +121,7 @@ class NfseEmitPayloadBuilderTest extends TestCase
             'descricao' => 'Serviço de teste',
             'codigo_tributacao_nacional' => '010301',
             'codigo_tributacao_municipal' => '100',
+            'codigo_nbs' => '115011000',
             'valor_unitario' => 100,
             'fin_nfse' => '0',
             'c_ind_op' => '100301',

@@ -151,6 +151,10 @@
                             <input type="text" name="tomador_numero" id="tomador_numero" value="{{ old('tomador_numero', $recorrencia->tomador_numero) }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                         </div>
                         <div>
+                            <label class="block text-sm font-medium text-gray-700">Complemento</label>
+                            <input type="text" name="tomador_complemento" id="tomador_complemento" value="{{ old('tomador_complemento', $recorrencia->tomador_complemento) }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                        </div>
+                        <div>
                             <label class="block text-sm font-medium text-gray-700">Bairro</label>
                             <input type="text" name="tomador_bairro" id="tomador_bairro" value="{{ old('tomador_bairro', $recorrencia->tomador_bairro) }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                         </div>
@@ -169,10 +173,24 @@
             <div class="bg-white shadow-sm rounded-lg p-6 border border-gray-200">
                 <h3 class="text-lg font-bold text-gray-800 border-b border-gray-200 pb-2 mb-6">3. Detalhes do Serviço</h3>
 
+                <div class="mb-6">
+                    <select name="servico_id" id="servico_select" class="w-full rounded-md border-blue-300 text-sm">
+                        <option value="">-- Preencher com Catálogo (Opcional) --</option>
+                        @foreach($servicos as $servico)
+                            <option value="{{ $servico->id }}"
+                                    data-valor="{{ number_format($servico->valor_unitario, 2, ',', '.') }}"
+                                    data-descricao="{{ preg_replace('/\s+/u', ' ', $servico->descricao ?? '') }}"
+                                {{ (old('servico_id', $recorrencia->servico_id) == $servico->id) ? 'selected' : '' }}>
+                                {{ $servico->nome }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div class="md:col-span-2">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Discriminação *</label>
-                        <textarea name="descricao_servico" rows="4" class="w-full rounded-md border-gray-300 shadow-sm" required placeholder="Use {MES} e {ANO} para substituição automática">{{ old('descricao_servico', $recorrencia->descricao_servico) }}</textarea>
+                        <textarea name="descricao_servico" id="descricao" rows="4" class="w-full rounded-md border-gray-300 shadow-sm" required placeholder="Use {MES} e {ANO} para substituição automática">{{ old('descricao_servico', $recorrencia->descricao_servico) }}</textarea>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Valor Total (R$) *</label>
@@ -192,6 +210,8 @@
                         <select name="trib_issqn" class="w-full rounded-md border-gray-300 shadow-sm">
                             <option value="1" {{ old('trib_issqn', $recorrencia->trib_issqn) == '1' ? 'selected' : '' }}>1 - Operação tributável</option>
                             <option value="2" {{ old('trib_issqn', $recorrencia->trib_issqn) == '2' ? 'selected' : '' }}>2 - Imunidade</option>
+                            <option value="3" {{ old('trib_issqn', $recorrencia->trib_issqn) == '3' ? 'selected' : '' }}>3 - Exportação de serviço</option>
+                            <option value="4" {{ old('trib_issqn', $recorrencia->trib_issqn) == '4' ? 'selected' : '' }}>4 - Não Incidência</option>
                         </select>
                     </div>
                     <div>
@@ -257,11 +277,13 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        g2mPageInit('recorrencias-editar', function () {
+            const selCliente = document.getElementById('select_cliente');
+            const selServico = document.getElementById('servico_select');
+            if (!selCliente) return;
 
-            // --- 1. MÁSCARAS ---
             function maskMoney(val) {
-                if(!val) return '';
+                if (!val) return '';
                 val = val.replace(/\D/g, '');
                 val = (val / 100).toFixed(2) + '';
                 val = val.replace('.', ',');
@@ -270,7 +292,7 @@
             }
 
             function getFloat(val) {
-                if(!val) return 0;
+                if (!val) return 0;
                 return parseFloat(val.replace(/\./g, '').replace(',', '.')) || 0;
             }
 
@@ -278,83 +300,81 @@
                 return val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             }
 
-            const moneyInputs = document.querySelectorAll('.money');
-            moneyInputs.forEach(input => {
-                input.addEventListener('input', e => { e.target.value = maskMoney(e.target.value); });
-                // Dispara máscara inicial se tiver valor e não estiver formatado
-                if(input.value && input.value.indexOf(',') === -1) {
+            document.querySelectorAll('.money').forEach(input => {
+                input.oninput = e => { e.target.value = maskMoney(e.target.value); };
+                if (input.value && input.value.indexOf(',') === -1) {
                     input.value = maskMoney(input.value.replace('.', ''));
                 }
             });
 
-            // --- 2. PREENCHIMENTO CLIENTE ---
-            const selCliente = document.getElementById('select_cliente');
-
             function preencherCliente() {
                 const opt = selCliente.options[selCliente.selectedIndex];
-                if(opt.value){
-                    const setVal = (id, attr) => {
-                        const el = document.getElementById(id);
-                        if(el) el.value = opt.getAttribute(attr) || '';
-                    };
-                    setVal('tomador_cnpj', 'data-cnpj');
-                    setVal('tomador_nome', 'data-nome');
-                    setVal('tomador_email', 'data-email');
-                    setVal('tomador_telefone', 'data-telefone');
-                    setVal('tomador_im', 'data-im');
-                    setVal('tomador_cep', 'data-cep');
-                    setVal('tomador_endereco', 'data-endereco');
-                    setVal('tomador_numero', 'data-numero');
-                    setVal('tomador_bairro', 'data-bairro');
-                    setVal('tomador_cidade', 'data-cidade');
-                    setVal('tomador_uf', 'data-uf');
-                }
+                if (!opt.value) return;
+                const setVal = (id, attr) => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = opt.getAttribute(attr) || '';
+                };
+                setVal('tomador_cnpj', 'data-cnpj');
+                setVal('tomador_nome', 'data-nome');
+                setVal('tomador_email', 'data-email');
+                setVal('tomador_telefone', 'data-telefone');
+                setVal('tomador_im', 'data-im');
+                setVal('tomador_cep', 'data-cep');
+                setVal('tomador_endereco', 'data-endereco');
+                setVal('tomador_numero', 'data-numero');
+                setVal('tomador_complemento', 'data-complemento');
+                setVal('tomador_bairro', 'data-bairro');
+                setVal('tomador_cidade', 'data-cidade');
+                setVal('tomador_uf', 'data-uf');
             }
 
-            selCliente.addEventListener('change', preencherCliente);
+            selCliente.onchange = preencherCliente;
 
-            // CORREÇÃO: Forçar preenchimento se houver cliente selecionado mas campos estiverem vazios
-            // (Caso de registros antigos do banco que não tinham os campos de endereço)
             const inputNome = document.getElementById('tomador_nome');
-            if(selCliente.value && !inputNome.value) {
+            if (selCliente.value && inputNome && !inputNome.value) {
                 preencherCliente();
             }
 
-            // --- 3. CÁLCULO DE IMPOSTOS ---
-            const inputValorServico = document.getElementById('valor_servico');
-
-            // Função de cálculo isolada para reutilização
-            function calcularImposto(inputPercent) {
-                const targetId = inputPercent.getAttribute('data-target');
-                const targetInput = document.getElementById(targetId);
-                const valorServico = getFloat(inputValorServico.value);
-                const percent = getFloat(inputPercent.value);
-
-                if (valorServico > 0) {
-                    targetInput.value = formatFloat((valorServico * percent) / 100);
-                } else {
-                    targetInput.value = '0,00';
-                }
+            if (selServico) {
+                selServico.onchange = function () {
+                    const opt = this.options[this.selectedIndex];
+                    if (!opt.value) return;
+                    const valorEl = document.getElementById('valor_servico');
+                    if (valorEl) {
+                        valorEl.value = opt.getAttribute('data-valor') || '';
+                        valorEl.dispatchEvent(new Event('input'));
+                    }
+                    const descEl = document.getElementById('descricao');
+                    if (descEl) descEl.value = opt.getAttribute('data-descricao') || '';
+                };
             }
 
-            // Evento: % -> Valor
+            const inputValorServico = document.getElementById('valor_servico');
+
+            function calcularImposto(inputPercent) {
+                const targetInput = document.getElementById(inputPercent.getAttribute('data-target'));
+                if (!targetInput || !inputValorServico) return;
+                const valorServico = getFloat(inputValorServico.value);
+                const percent = getFloat(inputPercent.value);
+                targetInput.value = valorServico > 0
+                    ? formatFloat((valorServico * percent) / 100)
+                    : '0,00';
+            }
+
             document.querySelectorAll('.calc-tax-percent').forEach(input => {
-                input.addEventListener('input', function() { calcularImposto(this); }); // Mudado para 'input' para tempo real
-                input.addEventListener('change', function() { calcularImposto(this); });
+                input.oninput = function () { calcularImposto(this); };
+                input.onchange = function () { calcularImposto(this); };
             });
 
-            // Recalcula tudo ao mudar o valor total
-            inputValorServico.addEventListener('input', function() {
-                if(getFloat(this.value) > 0) {
-                    document.querySelectorAll('.calc-tax-percent').forEach(el => calcularImposto(el));
-                }
-            });
+            if (inputValorServico) {
+                inputValorServico.addEventListener('input', function () {
+                    if (getFloat(this.value) > 0) {
+                        document.querySelectorAll('.calc-tax-percent').forEach(el => calcularImposto(el));
+                    }
+                });
+            }
 
-            // CORREÇÃO: Trigger inicial agressivo para garantir que os valores apareçam
-            // Espera um pouco para garantir que o AlpineJS iniciou
-            setTimeout(() => {
-                document.querySelectorAll('.calc-tax-percent').forEach(el => calcularImposto(el));
-            }, 300);
+            document.querySelectorAll('.calc-tax-percent').forEach(el => calcularImposto(el));
         });
     </script>
     </x-app-layout>

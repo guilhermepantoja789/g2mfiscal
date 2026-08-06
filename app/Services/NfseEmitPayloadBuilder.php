@@ -23,10 +23,17 @@ class NfseEmitPayloadBuilder
         }
 
         $codMun = $nota->servico->codigo_tributacao_municipal;
-        $codNbs = $nota->servico->codigo_tributacao_nacional;
+        $codTribNac = $nota->servico->codigo_tributacao_nacional;
+        $codCnbs = self::normalizeCnbs($nota->servico->codigo_nbs ?? null);
 
-        if (empty($codMun) || empty($codNbs)) {
-            throw new InvalidArgumentException('Serviço sem código NBS ou municipal configurado.');
+        if (empty($codMun) || empty($codTribNac)) {
+            throw new InvalidArgumentException('Serviço sem código de tributação nacional (cTribNac) ou municipal configurado.');
+        }
+
+        if ($codCnbs === null) {
+            throw new InvalidArgumentException(
+                'Serviço sem código NBS (cNBS) configurado. Com IBS/CBS na DPS é obrigatório informar o item da NBS (9 dígitos).'
+            );
         }
 
         $cliente = $nota->cliente;
@@ -59,7 +66,9 @@ class NfseEmitPayloadBuilder
             'tributacao_iss' => $nota->trib_issqn,
             'retencao_iss' => $nota->tp_ret_issqn,
 
-            'servico_nbs' => $codNbs,
+            // Histórico: servico_nbs = cTribNac (LC 116, 6 dígitos). cNBS é servico_cnbs.
+            'servico_nbs' => $codTribNac,
+            'servico_cnbs' => $codCnbs,
             'servico_municipal' => $codMun,
 
             'aliquota' => $aliqVal,
@@ -75,6 +84,23 @@ class NfseEmitPayloadBuilder
             'cst_ibscbs' => $ibscbs['cst_ibscbs'],
             'c_class_trib' => $ibscbs['c_class_trib'],
         ];
+    }
+
+    /**
+     * Normaliza NBS para 9 dígitos (TSCodNBS). Aceita máscara 1.1501.10.00.
+     */
+    public static function normalizeCnbs(?string $value): ?string
+    {
+        $digits = preg_replace('/\D/', '', (string) $value);
+        if ($digits === '' || $digits === null) {
+            return null;
+        }
+
+        if (strlen($digits) !== 9) {
+            return null;
+        }
+
+        return $digits;
     }
 
     /**

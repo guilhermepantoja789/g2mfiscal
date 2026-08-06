@@ -145,6 +145,10 @@
                             <input type="text" name="tomador_numero" id="tomador_numero" value="{{ old('tomador_numero') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                         </div>
                         <div>
+                            <label class="block text-sm font-medium text-gray-700">Complemento</label>
+                            <input type="text" name="tomador_complemento" id="tomador_complemento" value="{{ old('tomador_complemento') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                        </div>
+                        <div>
                             <label class="block text-sm font-medium text-gray-700">Bairro</label>
                             <input type="text" name="tomador_bairro" id="tomador_bairro" value="{{ old('tomador_bairro') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                         </div>
@@ -169,7 +173,7 @@
                         @foreach($servicos as $servico)
                             <option value="{{ $servico->id }}"
                                     data-valor="{{ number_format($servico->valor_unitario, 2, ',', '.') }}"
-                                    data-descricao="{{ $servico->descricao }}">
+                                    data-descricao="{{ preg_replace('/\s+/u', ' ', $servico->descricao ?? '') }}">
                                 {{ $servico->nome }}
                             </option>
                         @endforeach
@@ -269,11 +273,13 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        g2mPageInit('recorrencias-criar', function () {
+            const selCliente = document.getElementById('select_cliente');
+            const selServico = document.getElementById('servico_select');
+            if (!selCliente || !selServico) return;
 
-            // --- 1. MÁSCARAS ---
             function maskMoney(val) {
-                if(!val) return '';
+                if (!val) return '';
                 val = val.replace(/\D/g, '');
                 val = (val / 100).toFixed(2) + '';
                 val = val.replace('.', ',');
@@ -282,7 +288,7 @@
             }
 
             function getFloat(val) {
-                if(!val) return 0;
+                if (!val) return 0;
                 return parseFloat(val.replace(/\./g, '').replace(',', '.')) || 0;
             }
 
@@ -290,84 +296,75 @@
                 return val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             }
 
-            const moneyInputs = document.querySelectorAll('.money');
-            moneyInputs.forEach(input => {
-                input.addEventListener('input', e => { e.target.value = maskMoney(e.target.value); });
-                if(input.value) input.value = maskMoney(input.value.replace('.', ''));
+            document.querySelectorAll('.money').forEach(input => {
+                input.oninput = e => { e.target.value = maskMoney(e.target.value); };
+                if (input.value) input.value = maskMoney(input.value.replace('.', ''));
             });
 
-            // --- 2. PREENCHIMENTO CLIENTE ---
-            const selCliente = document.getElementById('select_cliente');
-            selCliente.addEventListener('change', function() {
+            selCliente.onchange = function () {
                 const opt = this.options[this.selectedIndex];
-                if(opt.value){
-                    const setVal = (id, attr) => {
-                        const el = document.getElementById(id);
-                        if(el) el.value = opt.getAttribute(attr) || '';
-                    };
-                    setVal('tomador_cnpj', 'data-cnpj');
-                    setVal('tomador_nome', 'data-nome');
-                    setVal('tomador_email', 'data-email');
-                    setVal('tomador_telefone', 'data-telefone');
-                    setVal('tomador_im', 'data-im');
-                    setVal('tomador_cep', 'data-cep');
-                    setVal('tomador_endereco', 'data-endereco');
-                    setVal('tomador_numero', 'data-numero');
-                    // setVal('tomador_complemento', 'data-complemento'); // Adicionar input hidden ou visible se necessário
-                    setVal('tomador_bairro', 'data-bairro');
-                    setVal('tomador_cidade', 'data-cidade');
-                    setVal('tomador_uf', 'data-uf');
-                }
-            });
+                if (!opt.value) return;
+                const setVal = (id, attr) => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = opt.getAttribute(attr) || '';
+                };
+                setVal('tomador_cnpj', 'data-cnpj');
+                setVal('tomador_nome', 'data-nome');
+                setVal('tomador_email', 'data-email');
+                setVal('tomador_telefone', 'data-telefone');
+                setVal('tomador_im', 'data-im');
+                setVal('tomador_cep', 'data-cep');
+                setVal('tomador_endereco', 'data-endereco');
+                setVal('tomador_numero', 'data-numero');
+                setVal('tomador_complemento', 'data-complemento');
+                setVal('tomador_bairro', 'data-bairro');
+                setVal('tomador_cidade', 'data-cidade');
+                setVal('tomador_uf', 'data-uf');
+            };
 
-            // --- 3. PREENCHIMENTO SERVIÇO ---
-            const selServico = document.getElementById('servico_select');
-            selServico.addEventListener('change', function() {
+            selServico.onchange = function () {
                 const opt = this.options[this.selectedIndex];
-                if(opt.value){
-                    document.getElementById('valor_servico').value = opt.getAttribute('data-valor');
-                    document.getElementById('valor_servico').dispatchEvent(new Event('input'));
-                    document.getElementById('descricao').value = opt.getAttribute('data-descricao');
-                }
-            });
+                if (!opt.value) return;
+                const valorEl = document.getElementById('valor_servico');
+                valorEl.value = opt.getAttribute('data-valor') || '';
+                valorEl.dispatchEvent(new Event('input'));
+                const descEl = document.getElementById('descricao');
+                if (descEl) descEl.value = opt.getAttribute('data-descricao') || '';
+            };
 
-            // --- 4. CÁLCULO DE IMPOSTOS ---
             const inputValorServico = document.getElementById('valor_servico');
 
-            // % -> Valor
             document.querySelectorAll('.calc-tax-percent').forEach(input => {
-                input.addEventListener('change', function() {
-                    const targetId = this.getAttribute('data-target');
-                    const targetInput = document.getElementById(targetId);
+                input.onchange = function () {
+                    const targetInput = document.getElementById(this.getAttribute('data-target'));
                     const valorServico = getFloat(inputValorServico.value);
                     const percent = getFloat(this.value);
-                    if (valorServico > 0) {
+                    if (targetInput && valorServico > 0) {
                         targetInput.value = formatFloat((valorServico * percent) / 100);
                     }
-                });
+                };
             });
 
-            // Valor -> %
             document.querySelectorAll('.calc-tax-value').forEach(input => {
-                input.addEventListener('change', function() {
-                    const targetId = this.getAttribute('data-target');
-                    const targetInput = document.getElementById(targetId);
+                input.onchange = function () {
+                    const targetInput = document.getElementById(this.getAttribute('data-target'));
                     const valorServico = getFloat(inputValorServico.value);
                     const valorImposto = getFloat(this.value);
-                    if (valorServico > 0) {
+                    if (targetInput && valorServico > 0) {
                         targetInput.value = formatFloat((valorImposto / valorServico) * 100);
                     }
-                });
+                };
             });
 
-            // Recalcula ao mudar o valor total
-            inputValorServico.addEventListener('input', function() {
-                if(getFloat(this.value) > 0) {
-                    document.querySelectorAll('.calc-tax-percent').forEach(el => {
-                        if(getFloat(el.value) > 0) el.dispatchEvent(new Event('change'));
-                    });
-                }
-            });
+            if (inputValorServico) {
+                inputValorServico.addEventListener('input', function () {
+                    if (getFloat(this.value) > 0) {
+                        document.querySelectorAll('.calc-tax-percent').forEach(el => {
+                            if (getFloat(el.value) > 0) el.dispatchEvent(new Event('change'));
+                        });
+                    }
+                });
+            }
         });
     </script>
-    </x-app-layout>
+</x-app-layout>
