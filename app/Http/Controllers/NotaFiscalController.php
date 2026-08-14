@@ -1,20 +1,20 @@
 <?php
 
 namespace App\Http\Controllers;
-use App\Models\Cobranca;
-use App\Services\FinanceiroService;
-use App\Models\NotaFiscal;
-use App\Models\Servico;
+
+use App\Http\Requests\NotaFiscalRequest;
+use App\Models\ClassTrib;
 use App\Models\Cliente;
 use App\Models\Empresa;
 use App\Models\IndOp;
-use App\Models\ClassTrib;
+use App\Models\NotaFiscal;
+use App\Models\Servico;
+use App\Services\FinanceiroService;
+use App\Services\Fiscal\NfseDanfseService;
 use App\Services\NfseNacionalService;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
-use App\Http\Requests\NotaFiscalRequest;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class NotaFiscalController extends Controller
 {
@@ -28,7 +28,7 @@ class NotaFiscalController extends Controller
         // 1. Filtro de Busca (Texto)
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('tomador_nome', 'like', "%{$search}%")
                     ->orWhere('tomador_cnpj', 'like', "%{$search}%")
                     ->orWhere('numero_nfse', 'like', "%{$search}%");
@@ -64,7 +64,7 @@ class NotaFiscalController extends Controller
         $empresaId = session('empresa_ativa');
         $empresa = Empresa::find($empresaId);
 
-        if (!$empresa->certificado || !$empresa->certificado->ativo) {
+        if (! $empresa->certificado || ! $empresa->certificado->ativo) {
             return redirect()->route('empresas.configuracao')
                 ->withErrors(['erro' => 'Configure seu certificado antes de emitir.']);
         }
@@ -100,21 +100,21 @@ class NotaFiscalController extends Controller
                 'empresa_id' => $empresaId,
                 'cliente_id' => $clienteId,
                 'servico_id' => $request->servico_id,
-                'status'     => 'criada', // Rascunho inicial
-                'ambiente'   => \App\Services\NfseAmbiente::label(),
+                'status' => 'criada', // Rascunho inicial
+                'ambiente' => \App\Services\NfseAmbiente::label(),
 
-                'tomador_cnpj'   => $data['tomador_cnpj'],
-                'tomador_nome'   => $data['tomador_nome'],
-                'tomador_email'  => $data['tomador_email'] ?? null,
+                'tomador_cnpj' => $data['tomador_cnpj'],
+                'tomador_nome' => $data['tomador_nome'],
+                'tomador_email' => $data['tomador_email'] ?? null,
 
-                'valor_servico'  => $data['valor_servico'],
-                'descricao'      => $request->descricao,
-                'emissao'        => $request->emissao,
+                'valor_servico' => $data['valor_servico'],
+                'descricao' => $request->descricao,
+                'emissao' => $request->emissao,
 
-                'trib_issqn'     => $data['trib_issqn'],
-                'tp_ret_issqn'   => $data['tp_ret_issqn'],
+                'trib_issqn' => $data['trib_issqn'],
+                'tp_ret_issqn' => $data['tp_ret_issqn'],
                 // Garante que a alíquota venha do form ou seja 0
-                'aliquota_iss'   => $data['aliquota_iss'] ?? 0,
+                'aliquota_iss' => $data['aliquota_iss'] ?? 0,
 
                 'fin_nfse' => $data['fin_nfse'] ?? null,
                 'ind_final' => $data['ind_final'] ?? null,
@@ -150,7 +150,8 @@ class NotaFiscalController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->withInput()->withErrors(['erro' => 'Erro ao salvar: ' . $e->getMessage()]);
+
+            return back()->withInput()->withErrors(['erro' => 'Erro ao salvar: '.$e->getMessage()]);
         }
     }
 
@@ -165,6 +166,7 @@ class NotaFiscalController extends Controller
 
         return view('notas.detalhe', compact('nota'));
     }
+
     /*
     * Tela de Edição (Apenas Rascunho/Erro)
     */
@@ -178,7 +180,7 @@ class NotaFiscalController extends Controller
             ->findOrFail($id);
 
         // 2. Bloqueio de Segurança
-        if (!in_array($nota->status, ['criada', 'erro', 'rascunho'])) {
+        if (! in_array($nota->status, ['criada', 'erro', 'rascunho'])) {
             return redirect()->route('notas.show', $id)
                 ->withErrors(['erro' => 'Esta nota não pode ser editada pois já foi processada ou autorizada.']);
         }
@@ -205,7 +207,7 @@ class NotaFiscalController extends Controller
         $nota = NotaFiscal::where('empresa_id', $empresaId)->with('cobranca')->findOrFail($id);
 
         // 1. Bloqueio
-        if (!in_array($nota->status, ['criada', 'erro', 'rascunho'])) {
+        if (! in_array($nota->status, ['criada', 'erro', 'rascunho'])) {
             return back()->withErrors(['erro' => 'Nota bloqueada para edição.']);
         }
 
@@ -222,19 +224,19 @@ class NotaFiscalController extends Controller
                 'servico_id' => $request->servico_id,
 
                 // RESET DE STATUS: Se estava com erro, volta para rascunho para tentar de novo
-                'status'     => ($nota->status == 'erro') ? 'criada' : $nota->status,
+                'status' => ($nota->status == 'erro') ? 'criada' : $nota->status,
 
-                'tomador_cnpj'   => $data['tomador_cnpj'],
-                'tomador_nome'   => $data['tomador_nome'],
-                'tomador_email'  => $data['tomador_email'] ?? null,
+                'tomador_cnpj' => $data['tomador_cnpj'],
+                'tomador_nome' => $data['tomador_nome'],
+                'tomador_email' => $data['tomador_email'] ?? null,
 
-                'valor_servico'  => $data['valor_servico'],
-                'descricao'      => $request->descricao,
-                'emissao'        => $request->emissao,
+                'valor_servico' => $data['valor_servico'],
+                'descricao' => $request->descricao,
+                'emissao' => $request->emissao,
 
-                'trib_issqn'     => $data['trib_issqn'],
-                'tp_ret_issqn'   => $data['tp_ret_issqn'],
-                'aliquota_iss'   => $data['aliquota_iss'],
+                'trib_issqn' => $data['trib_issqn'],
+                'tp_ret_issqn' => $data['tp_ret_issqn'],
+                'aliquota_iss' => $data['aliquota_iss'],
 
                 'fin_nfse' => $data['fin_nfse'] ?? null,
                 'ind_final' => $data['ind_final'] ?? null,
@@ -251,7 +253,7 @@ class NotaFiscalController extends Controller
                 'p_tot_trib_est' => $data['p_tot_trib_est'] ?? 0,
                 'p_tot_trib_mun' => $data['p_tot_trib_mun'] ?? 0,
 
-                'mensagem_erro' => null // Limpa erro antigo
+                'mensagem_erro' => null, // Limpa erro antigo
             ]);
 
             // 6. Lógica Financeira (Criar, Atualizar ou Remover)
@@ -285,7 +287,8 @@ class NotaFiscalController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->withInput()->withErrors(['erro' => 'Erro ao atualizar: ' . $e->getMessage()]);
+
+            return back()->withInput()->withErrors(['erro' => 'Erro ao atualizar: '.$e->getMessage()]);
         }
     }
 
@@ -300,11 +303,11 @@ class NotaFiscalController extends Controller
             ->findOrFail($id);
 
         // 2. Validações de Status e Serviço
-        if (!in_array($nota->status, ['criada', 'erro'])) {
+        if (! in_array($nota->status, ['criada', 'erro'])) {
             return back()->withErrors(['erro' => 'Status inválido para emissão.']);
         }
 
-        if (!$nota->servico) {
+        if (! $nota->servico) {
             return back()->withErrors(['erro' => 'Nenhum serviço vinculado. Impossível obter códigos tributários.']);
         }
 
@@ -357,329 +360,93 @@ class NotaFiscalController extends Controller
             // Erro Fatal (Exception) ao enfileirar
             $nota->update([
                 'status' => 'erro',
-                'mensagem_erro' => 'Erro interno ao enfileirar: ' . $e->getMessage()
+                'mensagem_erro' => 'Erro interno ao enfileirar: '.$e->getMessage(),
             ]);
+
             return back()->withErrors(['erro' => $e->getMessage()]);
         }
     }
 
     /**
-     * Gera PDF local (Espelho)
+     * Gera PDF local (DANFSe a partir do XML autorizado, ou espelho se rascunho).
      */
-    public function imprimir($id)
+    public function imprimir($id, NfseDanfseService $danfse)
     {
         $nota = NotaFiscal::where('empresa_id', session('empresa_ativa'))
+            ->with(['empresa', 'cliente', 'servico'])
             ->findOrFail($id);
 
-        $empresaIdSessao = session('empresa_ativa');
-
-        if (!$empresaIdSessao) {
-            return redirect()->route('dashboard')->withErrors(['erro' => 'Sessão expirada.']);
-        }
-
-        $empresa = $nota->empresa ?? Empresa::find($empresaIdSessao);
-        $cliente = $nota->cliente;
-
-        $xmlObject = null;
-        $chaveAcesso = null;
-        $dataEmissao = $nota->created_at;
-
-        if ($nota->status === 'autorizada' && !empty($nota->xml_autorizado)) {
-            try {
-                $content = $nota->xml_autorizado;
-                if (str_starts_with($content, "\x1f\x8b")) {
-                    $content = gzdecode($content);
-                } elseif (!str_starts_with(trim($content), '<')) {
-                    $decoded = base64_decode($content, true);
-                    if ($decoded && str_starts_with($decoded, "\x1f\x8b")) $content = gzdecode($decoded);
-                    elseif ($decoded) $content = $decoded;
-                }
-
-                $xmlObject = simplexml_load_string(str_replace(['ns1:', 'nfse:'], '', $content));
-
-                if (preg_match('/<chvAcesso>(.*?)<\/chvAcesso>/', $content, $matches)) {
-                    $chaveAcesso = $matches[1];
-                } elseif (preg_match('/Id="NFS([0-9]{50})"/', $content, $matches)) {
-                    $chaveAcesso = $matches[1];
-                }
-
-                if (preg_match('/<dhEmi>(.*?)<\/dhEmi>/', $content, $matches)) {
-                    $dataEmissao = new \DateTime($matches[1]);
-                }
-            } catch (\Exception $e) { }
-        }
-
-        $qrBase64 = null;
-        $fallbackImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
-
-        if (!empty($chaveAcesso)) {
-            try {
-                $urlConsulta = "https://www.nfse.gov.br/ConsultaPublica/";
-                $qrLink = "{$urlConsulta}?tpc=1&chave={$chaveAcesso}";
-                $apiUrl = "https://quickchart.io/qr?text=" . urlencode($qrLink) . "&size=300&ecLevel=M&margin=1";
-                $response = Http::withOptions(['verify' => false])->timeout(5)->get($apiUrl);
-                if ($response->successful()) {
-                    $qrBase64 = 'data:image/png;base64,' . base64_encode($response->body());
-                } else {
-                    $qrBase64 = $fallbackImage;
-                }
-            } catch (\Exception $e) {
-                $qrBase64 = $fallbackImage;
-            }
-        } else {
-            $chaveAcesso = 'PENDENTE';
-            $qrBase64 = $fallbackImage;
-        }
-
-        // Mapa IBGE -> Nome de Cidade (principais do AM)
-        $cidadesIbge = [
-            '1302603' => 'Manaus',
-            '1300029' => 'Anamã',
-            '1300060' => 'Anori',
-            '1300086' => 'Apuí',
-            '1300102' => 'Atalaia do Norte',
-            '1300144' => 'Autazes',
-            '1300201' => 'Barcelos',
-            '1300300' => 'Barreirinha',
-            '1300409' => 'Benjamin Constant',
-            '1300508' => 'Beruri',
-            '1300607' => 'Boa Vista do Ramos',
-            '1300680' => 'Boca do Acre',
-            '1300706' => 'Borba',
-            '1300805' => 'Caapiranga',
-            '1300839' => 'Canutama',
-            '1300904' => 'Carauari',
-            '1301001' => 'Careiro',
-            '1301100' => 'Careiro da Várzea',
-            '1301159' => 'Coari',
-            '1301209' => 'Codajás',
-            '1301308' => 'Eirunepé',
-            '1301407' => 'Envira',
-            '1301506' => 'Fonte Boa',
-            '1301605' => 'Guajará',
-            '1301654' => 'Humaitá',
-            '1301704' => 'Ipixuna',
-            '1301803' => 'Iranduba',
-            '1301852' => 'Itacoatiara',
-            '1301902' => 'Itamarati',
-            '1302009' => 'Itapiranga',
-            '1302108' => 'Japurá',
-            '1302207' => 'Juruá',
-            '1302306' => 'Jutaí',
-            '1302405' => 'Lábrea',
-            '1302504' => 'Manacapuru',
-            '1302553' => 'Manaquiri',
-            '1302702' => 'Manicoré',
-            '1302801' => 'Maraã',
-            '1302900' => 'Maués',
-            '1303007' => 'Nhamundá',
-            '1303106' => 'Nova Olinda do Norte',
-            '1303205' => 'Novo Airão',
-            '1303304' => 'Novo Aripuanã',
-            '1303403' => 'Parintins',
-            '1303502' => 'Pauini',
-            '1303536' => 'Presidente Figueiredo',
-            '1303569' => 'Rio Preto da Eva',
-            '1303601' => 'Santa Isabel do Rio Negro',
-            '1303700' => 'Santo Antônio do Içá',
-            '1303809' => 'São Gabriel da Cachoeira',
-            '1303908' => 'São Paulo de Olivença',
-            '1303957' => 'São Sebastião do Uatumã',
-            '1304005' => 'Silves',
-            '1304062' => 'Tabatinga',
-            '1304104' => 'Tapauá',
-            '1304203' => 'Tefé',
-            '1304237' => 'Tonantins',
-            '1304260' => 'Uarini',
-            '1304302' => 'Urucará',
-            '1304401' => 'Urucurituba',
-        ];
-
-        // Resolver nome da cidade do emitente
-        $cidadeEmitente = $cidadesIbge[$empresa->cod_ibge_mun ?? ''] ?? 'Manaus';
-
-        // Resolver nome da cidade do tomador
-        $cidadeCodigoTomador = $cliente?->cidade_codigo ?? '';
-        $cidadeTomador = $cidadesIbge[$cidadeCodigoTomador] ?? $cidadeCodigoTomador;
-
-        // Regime tributário legível
-        $regimesMap = [
-            1 => 'Não Optante',
-            2 => 'MEI - Microempreendedor Individual',
-            3 => 'Simples Nacional',
-        ];
-        $regimeTrib = $regimesMap[$empresa->regime_tributario ?? 3] ?? 'Simples Nacional';
-
-        $emitente = (object) [
-            'razao_social' => $empresa->razao_social,
-            'nome_fantasia' => $empresa->nome_fantasia,
-            'cnpj' => $empresa->cnpj,
-            'inscricao_municipal' => $empresa->inscricao_municipal,
-            'endereco' => $empresa->logradouro,
-            'numero' => $empresa->numero,
-            'complemento' => $empresa->complemento,
-            'bairro' => $empresa->bairro,
-            'cidade' => $cidadeEmitente,
-            'uf' => $empresa->uf,
-            'cep' => $empresa->cep,
-            'telefone' => $empresa->telefone,
-            'email' => $empresa->email,
-            'regime_tributario' => $regimeTrib,
-        ];
-
-        $tomador = (object) [
-            'razao_social'        => $cliente?->razao_social ?? $nota->tomador_nome,
-            'documento'           => $cliente?->cnpj ?? $nota->tomador_cnpj,
-            'inscricao_municipal' => $cliente?->inscricao_municipal ?? '',
-            'endereco'            => $cliente?->logradouro ?? '',
-            'numero'              => $cliente?->numero ?? '',
-            'complemento'         => $cliente?->complemento ?? '',
-            'bairro'              => $cliente?->bairro ?? '',
-            'cidade'              => $cidadeTomador,
-            'uf'                  => $cliente?->uf ?? '',
-            'cep'                 => $cliente?->cep ?? '',
-            'email'               => $cliente?->email ?? ($nota->tomador_email ?? ''),
-            'telefone'            => $cliente?->telefone ?? '',
-        ];
-
-        // Calcular ISS e valor líquido com dados reais
-        $aliquotaIss = (float)($nota->aliquota_iss > 0 ? $nota->aliquota_iss : $nota->p_tot_trib_mun);
-        $valorServico = (float)$nota->valor_servico;
-        $valorIss = round($valorServico * $aliquotaIss / 100, 2);
-        $issRetido = ($nota->tp_ret_issqn == 2); // 2 = Retido pelo Tomador
-        $valorLiquido = $issRetido ? ($valorServico - $valorIss) : $valorServico;
-
-        $dadosNota = (object) [
-            'id' => $nota->id,
-            'numero' => $nota->numero_nfse,
-            'serie' => \App\Services\NfseAmbiente::serie(),
-            'chave' => $chaveAcesso,
-            'data_emissao' => $nota->emissao ?? $dataEmissao,
-            'codigo_verificacao' => $nota->codigo_verificacao,
-            'competencia' => $nota->emissao ?? $dataEmissao,
-            'local_prestacao' => $cidadeEmitente . '/' . ($empresa->uf ?? 'AM'),
-            'status' => $nota->status,
-            'ambiente' => $nota->ambiente ?? 'homologacao',
-        ];
-
-        // Situação tributária do ISS
-        $tribIssqnMap = [
-            1 => 'Tributável',
-            2 => 'Imunidade',
-            3 => 'Exportação',
-            4 => 'Não Incidência',
-        ];
-
-        $dadosServico = (object) [
-            'nome' => $nota->servico?->nome ?? '',
-            'discriminacao' => $nota->descricao,
-            'codigo_nbs' => $nota->servico?->codigo_nbs ?? '',
-            'item_lista_servico' => $nota->servico?->codigo_tributacao_municipal ?? '',
-            'valor_servico' => $valorServico,
-            'valor_deducoes' => 0.00,
-            'iss_retido' => $issRetido,
-            'valor_iss' => $valorIss,
-            'valor_liquido' => $valorLiquido,
-            'aliquota_iss' => $aliquotaIss,
-            'trib_issqn' => $tribIssqnMap[$nota->trib_issqn ?? 1] ?? 'Tributável',
-            'tp_ret_issqn' => $nota->tp_ret_issqn ?? 1,
-        ];
-
-        // Tributos aproximados (Lei da Transparência)
-        $tributos = (object) [
-            'v_fed' => (float)($nota->v_tot_trib_fed ?? 0),
-            'v_est' => (float)($nota->v_tot_trib_est ?? 0),
-            'v_mun' => (float)($nota->v_tot_trib_mun ?? 0),
-            'p_fed' => (float)($nota->p_tot_trib_fed ?? 0),
-            'p_est' => (float)($nota->p_tot_trib_est ?? 0),
-            'p_mun' => (float)($nota->p_tot_trib_mun ?? 0),
-        ];
-        $tributos->v_total = $tributos->v_fed + $tributos->v_est + $tributos->v_mun;
-
-        $outras_informacoes = "Documento emitido por ME ou EPP optante pelo Simples Nacional.";
-
-        $pdf = Pdf::loadView('pdf.danfse', [
-            'emitente' => $emitente,
-            'tomador'  => $tomador,
-            'nota'     => $dadosNota,
-            'servico'  => $dadosServico,
-            'tributos' => $tributos,
-            'outras_informacoes' => $outras_informacoes,
-            'xml'      => $xmlObject,
-            'chaveAcesso' => $chaveAcesso,
-            'qrCodeBase64' => $qrBase64
-        ]);
-
-        return $pdf->stream("NFSe-{$nota->numero_nfse}.pdf");
+        return $danfse->stream($nota);
     }
 
     /**
-     * Download do PDF Oficial da API Nacional
+     * Tenta o PDF da ADN. Em falha, volta à tela da nota com aviso e ações — nunca entrega o espelho como oficial.
      */
-    public function baixarDanfseOficial($id)
+    public function baixarDanfseOficial($id, NfseDanfseService $danfse)
     {
         $nota = NotaFiscal::where('empresa_id', session('empresa_ativa'))
+            ->with('empresa')
             ->findOrFail($id);
 
         if ($nota->status !== 'autorizada' || empty($nota->xml_autorizado)) {
-            return back()->withErrors(['erro' => 'Esta nota não possui XML autorizado para gerar o DANFSe.']);
+            return redirect()->route('notas.show', $id)
+                ->withErrors(['download' => 'Esta nota não possui XML autorizado para baixar a DANFSe da ADN.']);
         }
 
-        $chaveAcesso = $nota->chave_acesso ?? null;
+        $chaveAcesso = $danfse->resolverChaveAcesso($nota);
 
         if (empty($chaveAcesso)) {
-            $content = $nota->xml_autorizado;
-            if (str_starts_with($content, "\x1f\x8b")) {
-                $content = gzdecode($content);
-            } elseif (!str_starts_with(trim($content), '<')) {
-                $decoded = base64_decode($content, true);
-                if ($decoded && str_starts_with($decoded, "\x1f\x8b")) $content = gzdecode($decoded);
-                elseif ($decoded) $content = $decoded;
-            }
-
-            if (preg_match('/<chvAcesso>(.*?)<\/chvAcesso>/', $content, $matches)) {
-                $chaveAcesso = $matches[1];
-            } elseif (preg_match('/Id="NFS([0-9]{50})"/', $content, $matches)) {
-                $chaveAcesso = $matches[1];
-            }
-        }
-
-        if (empty($chaveAcesso)) {
-            return back()->withErrors(['erro' => 'Não foi possível identificar a Chave de Acesso desta nota.']);
+            return redirect()->route('notas.show', $id)
+                ->withErrors(['download' => 'Não foi possível identificar a chave de acesso desta nota.']);
         }
 
         try {
-            $service = new NfseNacionalService($nota->empresa);
+            $service = $this->nfseNacionalService($nota->empresa);
             $pdfContent = $service->downloadDanfse($chaveAcesso);
 
             return response($pdfContent)
                 ->header('Content-Type', 'application/pdf')
-                ->header('Content-Disposition', 'inline; filename="DANFSe_Oficial_' . $nota->numero_nfse . '.pdf"');
+                ->header('Content-Disposition', 'inline; filename="DANFSe_ADN_'.$nota->numero_nfse.'.pdf"');
+        } catch (\Throwable $e) {
+            $http = $this->httpStatusFromDanfseException($e);
+            $codigo = $http ? 'HTTP '.$http : 'erro de conexão';
 
-        } catch (\Exception $e) {
-            // ADN (principalmente produção restrita) costuma responder 502/503.
-            // Nesse caso entrega o espelho local em vez de bloquear o usuário.
-            if (preg_match('/Falha ao baixar DANFSe:\s*50[234]/', $e->getMessage())) {
-                \Illuminate\Support\Facades\Log::warning('DANFSe oficial indisponível na ADN; usando espelho local', [
-                    'nota_id' => $nota->id,
-                    'chave' => $chaveAcesso,
-                    'erro' => $e->getMessage(),
-                ]);
+            Log::warning('DANFSe ADN indisponível', [
+                'nota_id' => $nota->id,
+                'chave' => $chaveAcesso,
+                'http' => $http,
+                'erro' => $e->getMessage(),
+            ]);
 
-                return $this->imprimir($id);
-            }
-
-            return back()->withErrors([
-                'download' => 'Erro ao baixar do governo: '.$e->getMessage()
-                    .' Use o Espelho Interno enquanto a ADN estiver indisponível.',
+            return redirect()->route('notas.show', $id)->withErrors([
+                'download' => 'Serviço da ADN indisponível ('.$codigo.'): '.$e->getMessage(),
             ]);
         }
     }
+
+    private function nfseNacionalService(Empresa $empresa): NfseNacionalService
+    {
+        if (app()->bound(NfseNacionalService::class)) {
+            return app(NfseNacionalService::class);
+        }
+
+        return new NfseNacionalService($empresa);
+    }
+
+    private function httpStatusFromDanfseException(\Throwable $e): ?int
+    {
+        if (preg_match('/Falha ao baixar DANFSe:\s*(\d{3})/', $e->getMessage(), $matches)) {
+            return (int) $matches[1];
+        }
+
+        return null;
+    }
+
     public function destroy($id)
     {
         $nota = NotaFiscal::where('empresa_id', session('empresa_ativa'))->findOrFail($id);
 
-        if (!in_array($nota->status, ['criada', 'rascunho', 'erro'])) {
+        if (! in_array($nota->status, ['criada', 'rascunho', 'erro'])) {
             return back()->withErrors(['erro' => 'Apenas rascunhos ou notas com erro podem ser excluídas.']);
         }
 

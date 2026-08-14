@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.01">
+  <infNFSe Id="NFS13026032209279540000120000000000000226012551849886">
+    <xLocEmi>Manaus</xLocEmi>
+    <xLocPrestacao>Manaus</xLocPrestacao>
+    <nNFSe>2</nNFSe>
+    <cLocIncid>1302603</cLocIncid>
+    <xLocIncid>Manaus</xLocIncid>
+    <verAplic>SefinNacional_1.5.0</verAplic>
+    <cStat>100</cStat>
+    <dhProc>2026-01-08T18:48:30-03:00</dhProc>
+    <emit>
+      <CNPJ>12345678000195</CNPJ>
+      <IM>1</IM>
+      <xNome>TESTE</xNome>
+    </emit>
+    <valores>
+      <vLiq>100.00</vLiq>
+    </valores>
+    <DPS versao="1.00">
+      <infDPS Id="DPS130260320927954000012000001000000000003190">
+        <tpAmb>1</tpAmb>
+        <dhEmi>2026-01-08T18:48:19-03:00</dhEmi>
+        <serie>00001</serie>
+        <nDPS>3190</nDPS>
+        <dCompet>2026-01-08</dCompet>
+        <cLocEmi>1302603</cLocEmi>
+      </infDPS>
+    </DPS>
+  </infNFSe>
+</NFSe>

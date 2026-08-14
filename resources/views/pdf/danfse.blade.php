@@ -4,9 +4,6 @@
     <meta charset="utf-8">
     <title>DANFSe - NFS-e #{{ $nota->numero ?? $nota->id }}</title>
     <style>
-        /* ============================================================
-         * DANFSe Padrão Nacional — Espelho Local
-         * ============================================================ */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Helvetica', 'Arial', sans-serif;
@@ -22,20 +19,18 @@
             padding: 8px;
         }
 
-        /* ---- Faixa de aviso (sempre visível) ---- */
-        .aviso-espelho {
+        .aviso-faixa {
             background: #c62828;
             color: #fff;
             text-align: center;
             font-size: 11px;
             font-weight: bold;
             padding: 5px 0;
-            letter-spacing: 2px;
+            letter-spacing: 1.5px;
             text-transform: uppercase;
             margin-bottom: 6px;
         }
 
-        /* ---- Marca d'água extra para rascunho/erro ---- */
         .watermark {
             position: fixed;
             top: 38%;
@@ -51,7 +46,6 @@
             letter-spacing: 6px;
         }
 
-        /* ---- Cabeçalho ---- */
         .header {
             border: 1.5px solid #333;
             margin-bottom: 5px;
@@ -66,23 +60,31 @@
             vertical-align: middle;
             padding: 6px 8px;
         }
-        .header-logo {
-            width: 90px;
+        .header-brand {
+            width: 110px;
             text-align: center;
             border-right: 1px solid #333;
+            background: #f7f7f7;
         }
-        .header-logo img {
-            max-width: 70px;
-            max-height: 55px;
+        .header-brand .sigla {
+            font-size: 13px;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        .header-brand .sigla-sub {
+            font-size: 7px;
+            color: #555;
+            text-transform: uppercase;
+            margin-top: 2px;
         }
         .header-title {
             text-align: center;
         }
         .header-title h1 {
-            font-size: 13px;
+            font-size: 12px;
             margin: 0;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
         }
         .header-title .subtitle {
             font-size: 8px;
@@ -112,13 +114,12 @@
             margin-top: 2px;
         }
 
-        /* ---- Seções (boxes) ---- */
         .section {
             border: 1px solid #999;
             margin-bottom: 4px;
         }
         .section-header {
-            background: linear-gradient(to right, #e0e0e0, #f0f0f0);
+            background: #e8e8e8;
             border-bottom: 1px solid #999;
             padding: 2px 6px;
             font-size: 8px;
@@ -131,7 +132,6 @@
             padding: 5px 6px;
         }
 
-        /* ---- Layout em grid (via table para DomPDF) ---- */
         .info-table {
             width: 100%;
             border-collapse: collapse;
@@ -158,7 +158,6 @@
             color: #1a1a1a;
         }
 
-        /* ---- Tabela de Valores ---- */
         .values-table {
             width: 100%;
             border-collapse: collapse;
@@ -181,7 +180,6 @@
             text-align: right;
         }
 
-        /* ---- Valor líquido ---- */
         .total-box {
             background: #e8f5e9;
             border: 1.5px solid #4caf50;
@@ -202,7 +200,6 @@
             color: #2e7d32;
         }
 
-        /* ---- ISS Retido ---- */
         .iss-retido-box {
             border: 1.5px solid #d32f2f;
             background: #ffebee;
@@ -214,16 +211,14 @@
             margin-top: 4px;
         }
 
-        /* ---- Discriminação ---- */
         .discriminacao-text {
-            min-height: 80px;
+            min-height: 60px;
             white-space: pre-wrap;
             font-size: 9px;
             line-height: 1.4;
             padding: 4px 0;
         }
 
-        /* ---- Tributos ---- */
         .tributos-table {
             width: 100%;
             border-collapse: collapse;
@@ -242,48 +237,54 @@
             color: #444;
         }
 
-        /* ---- QR Code / Rodapé ---- */
         .footer-qr {
-            text-align: center;
             margin-top: 8px;
             padding-top: 6px;
             border-top: 1px dashed #ccc;
         }
+        .footer-qr-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .footer-qr-table td {
+            vertical-align: middle;
+        }
         .footer-qr img {
-            width: 80px;
-            height: 80px;
+            width: 78px;
+            height: 78px;
         }
         .chave-acesso {
-            font-size: 8px;
-            margin-top: 3px;
+            font-size: 9px;
             color: #333;
-            word-break: break-all;
+            letter-spacing: 0.5px;
+        }
+        .auth-text {
+            font-size: 7px;
+            color: #555;
+            margin-top: 4px;
         }
         .footer-system {
             font-size: 7px;
-            color: #aaa;
+            color: #888;
             text-align: center;
             margin-top: 8px;
             padding-top: 4px;
             border-top: 1px solid #eee;
         }
 
-        /* ---- Helpers ---- */
-        .text-right { text-align: right; }
         .text-center { text-align: center; }
-        .text-left { text-align: left; }
     </style>
 </head>
 <body>
 
 <div class="page">
 
-    {{-- ========== FAIXA DE AVISO (sempre visível) ========== --}}
-    <div class="aviso-espelho">
-        ⚠ ESPELHO — DOCUMENTO SEM VALOR FISCAL ⚠
-    </div>
+    @if(($aviso ?? null) === 'espelho')
+        <div class="aviso-faixa">ESPELHO — DOCUMENTO SEM VALOR FISCAL</div>
+    @elseif(($aviso ?? null) === 'homolog')
+        <div class="aviso-faixa">NFS-e SEM VALIDADE JURÍDICA</div>
+    @endif
 
-    {{-- ========== MARCA D'ÁGUA extra para rascunho/erro ========== --}}
     @if($nota->status !== 'autorizada')
         <div class="watermark">
             SEM VALOR FISCAL<br>
@@ -291,21 +292,15 @@
         </div>
     @endif
 
-    {{-- ========== CABEÇALHO ========== --}}
     <div class="header">
         <div class="header-row">
-            <div class="header-cell header-logo">
-                @if(file_exists(public_path('img/logo.png')))
-                    <img src="{{ public_path('img/logo.png') }}" alt="Logo">
-                @else
-                    <div style="font-size: 8px; color: #999;">LOGO</div>
-                @endif
+            <div class="header-cell header-brand">
+                <div class="sigla">DANFSe</div>
+                <div class="sigla-sub">Padrão Nacional</div>
             </div>
             <div class="header-cell header-title">
-                <h1>Nota Fiscal de Serviços Eletrônica - NFS-e</h1>
-                <div class="subtitle">
-                    DANFSe — Documento Auxiliar da NFS-e &bull; Padrão Nacional
-                </div>
+                <h1>Nota Fiscal de Serviços Eletrônica</h1>
+                <div class="subtitle">Documento Auxiliar da NFS-e</div>
             </div>
             <div class="header-cell header-number">
                 <div class="label">Número da NFS-e</div>
@@ -315,45 +310,62 @@
         </div>
     </div>
 
-    {{-- ========== DADOS DA NOTA ========== --}}
     <div class="section">
+        <div class="section-header">Identificação da NFS-e</div>
         <div class="section-body" style="padding: 3px 6px;">
             <table class="info-table">
                 <tr>
                     <td style="width: 25%;">
                         <span class="info-label">Data/Hora de Emissão</span>
                         <span class="info-value">
-                            @if($nota->data_emissao instanceof \DateTime || $nota->data_emissao instanceof \Carbon\Carbon)
+                            @if($nota->data_emissao instanceof \DateTimeInterface)
                                 {{ $nota->data_emissao->format('d/m/Y H:i') }}
                             @else
                                 {{ $nota->data_emissao ?? '—' }}
                             @endif
                         </span>
                     </td>
-                    <td style="width: 25%;">
+                    <td style="width: 20%;">
                         <span class="info-label">Competência</span>
                         <span class="info-value">
-                            @if($nota->competencia instanceof \DateTime || $nota->competencia instanceof \Carbon\Carbon)
+                            @if($nota->competencia instanceof \DateTimeInterface)
                                 {{ $nota->competencia->format('m/Y') }}
                             @else
                                 {{ $nota->competencia ?? '—' }}
                             @endif
                         </span>
                     </td>
-                    <td style="width: 25%;">
+                    <td style="width: 20%;">
+                        <span class="info-label">Nº DPS / Série</span>
+                        <span class="info-value">{{ $nota->numero_dps ?? '—' }} / {{ $nota->serie }}</span>
+                    </td>
+                    <td style="width: 17%;">
+                        <span class="info-label">Situação</span>
+                        <span class="info-value">{{ $nota->situacao ?? $nota->status }}</span>
+                    </td>
+                    <td style="width: 18%;">
+                        <span class="info-label">Finalidade</span>
+                        <span class="info-value">{{ $nota->finalidade ?? 'Regular' }}</span>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
                         <span class="info-label">Local da Prestação</span>
                         <span class="info-value">{{ $nota->local_prestacao }}</span>
                     </td>
-                    <td style="width: 25%;">
+                    <td>
                         <span class="info-label">Código de Verificação</span>
                         <span class="info-value" style="font-weight:bold;">{{ $nota->codigo_verificacao ?? '—' }}</span>
+                    </td>
+                    <td colspan="3">
+                        <span class="info-label">Chave de Acesso</span>
+                        <span class="info-value-bold">{{ $nota->chave_formatada ?? $nota->chave }}</span>
                     </td>
                 </tr>
             </table>
         </div>
     </div>
 
-    {{-- ========== PRESTADOR ========== --}}
     <div class="section">
         <div class="section-header">Prestador de Serviços</div>
         <div class="section-body">
@@ -391,16 +403,20 @@
                         </span>
                     </td>
                     <td>
-                        <span class="info-label">Município / UF</span>
-                        <span class="info-value">{{ $emitente->cidade }}/{{ $emitente->uf }}</span>
+                        <span class="info-label">Município / UF / IBGE</span>
+                        <span class="info-value">{{ $emitente->cidade }}/{{ $emitente->uf }} {{ $emitente->cod_ibge ? '— '.$emitente->cod_ibge : '' }}</span>
                     </td>
                 </tr>
                 <tr>
                     <td>
+                        <span class="info-label">CEP</span>
+                        <span class="info-value">{{ $emitente->cep ? preg_replace('/(\d{5})(\d{3})/', '$1-$2', preg_replace('/\D/', '', $emitente->cep)) : '—' }}</span>
+                    </td>
+                    <td>
                         <span class="info-label">Telefone</span>
                         <span class="info-value">{{ $emitente->telefone ?? '—' }}</span>
                     </td>
-                    <td colspan="2">
+                    <td>
                         <span class="info-label">E-mail</span>
                         <span class="info-value">{{ $emitente->email ?? '—' }}</span>
                     </td>
@@ -409,7 +425,6 @@
         </div>
     </div>
 
-    {{-- ========== TOMADOR ========== --}}
     <div class="section">
         <div class="section-header">Tomador de Serviços</div>
         <div class="section-body">
@@ -425,14 +440,14 @@
                         <span class="info-label">CNPJ / CPF</span>
                         <span class="info-value">
                             @php
-                                $doc = $tomador->documento;
+                                $doc = preg_replace('/\D/', '', (string) $tomador->documento);
                                 if (strlen($doc) == 14) {
                                     $doc = preg_replace('/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/', '$1.$2.$3/$4-$5', $doc);
                                 } elseif (strlen($doc) == 11) {
                                     $doc = preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', $doc);
                                 }
                             @endphp
-                            {{ $doc }}
+                            {{ $doc ?: '—' }}
                         </span>
                     </td>
                     <td style="width: 30%;">
@@ -457,7 +472,7 @@
                         <span class="info-label">Município / UF</span>
                         <span class="info-value">
                             {{ $tomador->cidade ?: '—' }}{{ $tomador->uf ? '/' . $tomador->uf : '' }}
-                            {{ $tomador->cep ? '— CEP: ' . preg_replace('/(\d{5})(\d{3})/', '$1-$2', $tomador->cep) : '' }}
+                            {{ $tomador->cep ? '— CEP: ' . preg_replace('/(\d{5})(\d{3})/', '$1-$2', preg_replace('/\D/', '', $tomador->cep)) : '' }}
                         </span>
                     </td>
                 </tr>
@@ -465,11 +480,9 @@
         </div>
     </div>
 
-    {{-- ========== DISCRIMINAÇÃO DOS SERVIÇOS ========== --}}
     <div class="section">
         <div class="section-header">Discriminação dos Serviços</div>
         <div class="section-body">
-            {{-- Código + Nome do Serviço --}}
             <table class="info-table" style="margin-bottom: 4px;">
                 <tr>
                     <td style="width: 35%;">
@@ -486,15 +499,12 @@
                     </td>
                 </tr>
             </table>
-
-            {{-- Descrição livre --}}
             <div class="discriminacao-text">{{ $servico->discriminacao }}</div>
         </div>
     </div>
 
-    {{-- ========== VALORES DO SERVIÇO ========== --}}
     <div class="section">
-        <div class="section-header">Valores da Nota Fiscal</div>
+        <div class="section-header">Tributação Municipal (ISSQN)</div>
         <div class="section-body" style="padding: 4px 6px;">
             <table class="values-table">
                 <thead>
@@ -519,13 +529,51 @@
                 </tbody>
             </table>
 
-            {{-- Tributos Aproximados (Lei da Transparência) --}}
+            @if($servico->iss_retido)
+                <div class="iss-retido-box">
+                    ISS RETIDO PELO TOMADOR — responsável pelo recolhimento de R$ {{ number_format($servico->valor_iss, 2, ',', '.') }}
+                </div>
+            @endif
+        </div>
+    </div>
+
+    @if(!empty($ibscbs))
+    <div class="section">
+        <div class="section-header">Tributação IBS/CBS</div>
+        <div class="section-body" style="padding: 3px 6px;">
+            <table class="info-table">
+                <tr>
+                    <td style="width: 25%;">
+                        <span class="info-label">CST</span>
+                        <span class="info-value">{{ $ibscbs->cst ?: '—' }}</span>
+                    </td>
+                    <td style="width: 25%;">
+                        <span class="info-label">cClassTrib</span>
+                        <span class="info-value">{{ $ibscbs->c_class_trib ?: '—' }}</span>
+                    </td>
+                    <td style="width: 25%;">
+                        <span class="info-label">cIndOp</span>
+                        <span class="info-value">{{ $ibscbs->c_ind_op ?: '—' }}</span>
+                    </td>
+                    <td style="width: 25%;">
+                        <span class="info-label">indDest / indFinal</span>
+                        <span class="info-value">{{ $ibscbs->ind_dest ?? '—' }} / {{ $ibscbs->ind_final ?? '—' }}</span>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+    @endif
+
+    <div class="section">
+        <div class="section-header">Valor Total da NFS-e</div>
+        <div class="section-body" style="padding: 4px 6px;">
             @if(isset($tributos) && $tributos->v_total > 0)
-            <table class="tributos-table" style="margin-top: 5px;">
+            <table class="tributos-table">
                 <thead>
                 <tr>
                     <th colspan="4" style="text-align: left; padding-left: 4px;">
-                        Valor Aprox. dos Tributos — Lei nº 12.741/2012 (De Olho no Imposto)
+                        Totais aproximados dos tributos — Lei nº 12.741/2012
                     </th>
                 </tr>
                 <tr>
@@ -556,14 +604,6 @@
             </table>
             @endif
 
-            {{-- ISS Retido --}}
-            @if($servico->iss_retido)
-                <div class="iss-retido-box">
-                    ⚠ ISS RETIDO PELO TOMADOR — O tomador do serviço é responsável pelo recolhimento do ISS no valor de R$ {{ number_format($servico->valor_iss, 2, ',', '.') }}
-                </div>
-            @endif
-
-            {{-- Valor Líquido --}}
             <div class="total-box">
                 <span class="total-label">VALOR LÍQUIDO DA NFS-e:</span>
                 <span class="total-value">R$ {{ number_format($servico->valor_liquido, 2, ',', '.') }}</span>
@@ -571,29 +611,46 @@
         </div>
     </div>
 
-    {{-- ========== OUTRAS INFORMAÇÕES ========== --}}
+    @if(!empty($outras_informacoes))
     <div class="section">
-        <div class="section-header">Outras Informações</div>
+        <div class="section-header">Informações Complementares</div>
         <div class="section-body" style="font-size: 8px; color: #555; padding: 4px 6px;">
-            {{ $outras_informacoes }}<br>
-            Não gera direito a crédito fiscal de IPI.
+            {{ $outras_informacoes }}
         </div>
     </div>
+    @endif
 
-    {{-- ========== QR CODE + CHAVE DE ACESSO ========== --}}
-    @if($qrCodeBase64 && $nota->chave && $nota->chave !== 'PENDENTE')
+    @if(!empty($qrCodeBase64) && $nota->chave && $nota->chave !== 'PENDENTE')
         <div class="footer-qr">
-            <img src="{{ $qrCodeBase64 }}" alt="QR Code">
-            <div class="chave-acesso">
-                <span class="info-label" style="display: inline;">Chave de Acesso:</span>
-                <strong>{{ $nota->chave }}</strong>
-            </div>
+            <table class="footer-qr-table">
+                <tr>
+                    <td style="width: 90px;">
+                        <img src="{{ $qrCodeBase64 }}" alt="QR Code">
+                    </td>
+                    <td>
+                        <span class="info-label">Chave de Acesso</span>
+                        <div class="chave-acesso"><strong>{{ $nota->chave_formatada ?? $nota->chave }}</strong></div>
+                        <div class="auth-text">
+                            A autenticidade desta NFS-e pode ser verificada pela leitura deste código QR
+                            ou pela consulta da chave de acesso no portal nacional da NFS-e.
+                            @if(!empty($urlConsulta))
+                                <br>{{ $urlConsulta }}
+                            @endif
+                        </div>
+                    </td>
+                </tr>
+            </table>
         </div>
     @endif
 
-    {{-- ========== RODAPÉ ========== --}}
     <div class="footer-system">
-        Gerado pelo sistema <strong>G2M Fiscal</strong> &bull; Este PDF é um <strong>espelho interno</strong> e <strong>não</strong> substitui a DANFSe oficial emitida pelo Portal Nacional da NFS-e.
+        @if(($aviso ?? null) === 'espelho')
+            Documento auxiliar gerado internamente — sem valor fiscal.
+        @elseif(($aviso ?? null) === 'homolog')
+            Documento gerado em ambiente de homologação (produção restrita).
+        @else
+            Documento auxiliar gerado a partir do XML autorizado da NFS-e.
+        @endif
     </div>
 
 </div>

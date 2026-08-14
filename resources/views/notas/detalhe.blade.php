@@ -76,22 +76,35 @@
                     @endif
 
                     @if($nota->status == 'autorizada')
-                        <a href="{{ route('notas.imprimir', $nota->id) }}" target="_blank" class="flex items-center px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 shadow-sm font-bold text-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
-                            <svg class="w-4 h-4 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                            Espelho Interno
+                        @php
+                            $danfseService = app(\App\Services\Fiscal\NfseDanfseService::class);
+                            $chavePortal = $danfseService->resolverChaveAcesso($nota);
+                            $urlPortalNfse = $danfseService->urlConsultaPublica($chavePortal);
+                        @endphp
+
+                        <a href="{{ route('notas.imprimir', $nota->id) }}" target="_blank" class="flex items-center px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 shadow-md hover:shadow-lg font-bold text-sm transition-all transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            Baixar DANFSe
                         </a>
 
-                        <a href="{{ route('notas.danfse_oficial', $nota->id) }}" target="_blank" class="flex items-center px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 shadow-md hover:shadow-lg font-bold text-sm transition-all transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                            Baixar DANFSe Oficial
+                        <a href="{{ route('notas.danfse_oficial', $nota->id) }}" class="flex items-center px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 shadow-sm font-bold text-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
+                            <svg class="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            Tentar PDF da ADN
                         </a>
+
+                        @if($urlPortalNfse)
+                            <a href="{{ $urlPortalNfse }}" target="_blank" rel="noopener noreferrer" class="flex items-center px-5 py-2.5 bg-white border border-indigo-200 text-indigo-700 rounded-xl hover:bg-indigo-50 shadow-sm font-bold text-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                                Consultar no Portal Nacional
+                            </a>
+                        @endif
                     @endif
                 </div>
             </div>
         </div>
 
-        <!-- MENSAGEM DE ERRO -->
-        @if($nota->status == 'erro' || $errors->has('erro') || $errors->has('download'))
+        <!-- MENSAGEM DE ERRO DE EMISSÃO -->
+        @if($nota->status == 'erro' || $errors->has('erro'))
             <div class="rounded-2xl bg-rose-50 border border-rose-200 p-6 shadow-sm relative overflow-hidden">
                 <div class="absolute -right-4 -top-4 text-rose-100 opacity-50 transform rotate-12">
                     <svg width="120" height="120" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>
@@ -101,11 +114,42 @@
                         <svg class="h-6 w-6 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
                     </div>
                     <div class="ml-4">
-                        <h3 class="text-sm font-bold text-rose-800 uppercase tracking-wide">
-                            {{ $nota->status === 'erro' || $errors->has('erro') ? 'Problema na Emissão' : 'Download DANFSe' }}
-                        </h3>
+                        <h3 class="text-sm font-bold text-rose-800 uppercase tracking-wide">Problema na Emissão</h3>
                         <div class="mt-2 text-rose-700 font-medium">
-                            {{ $nota->mensagem_erro ?? $errors->first('erro') ?? $errors->first('download') }}
+                            {{ $nota->mensagem_erro ?? $errors->first('erro') }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        @if($errors->has('download'))
+            @php
+                $danfseService = $danfseService ?? app(\App\Services\Fiscal\NfseDanfseService::class);
+                $chavePortal = $chavePortal ?? $danfseService->resolverChaveAcesso($nota);
+                $urlPortalNfse = $urlPortalNfse ?? $danfseService->urlConsultaPublica($chavePortal);
+            @endphp
+            <div class="rounded-2xl bg-amber-50 border border-amber-200 p-6 shadow-sm">
+                <div class="flex items-start">
+                    <div class="flex-shrink-0 mt-0.5">
+                        <svg class="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                    </div>
+                    <div class="ml-4 flex-1">
+                        <h3 class="text-sm font-bold text-amber-900 uppercase tracking-wide">ADN indisponível</h3>
+                        <p class="mt-2 text-amber-800 font-medium">{{ $errors->first('download') }}</p>
+                        <p class="mt-1 text-sm text-amber-700">O PDF da ADN não foi entregue. Use o DANFSe local (gerado do XML autorizado) ou consulte a nota no Portal Nacional.</p>
+                        <div class="mt-4 flex flex-wrap gap-2">
+                            <a href="{{ route('notas.imprimir', $nota->id) }}" target="_blank" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700">
+                                Baixar DANFSe local
+                            </a>
+                            <a href="{{ route('notas.danfse_oficial', $nota->id) }}" class="inline-flex items-center px-4 py-2 bg-white border border-amber-300 text-amber-900 rounded-lg text-sm font-bold hover:bg-amber-100">
+                                Tentar de novo
+                            </a>
+                            @if($urlPortalNfse)
+                                <a href="{{ $urlPortalNfse }}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-4 py-2 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-50">
+                                    Abrir Portal Nacional
+                                </a>
+                            @endif
                         </div>
                     </div>
                 </div>
