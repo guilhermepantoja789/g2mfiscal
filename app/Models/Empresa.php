@@ -65,6 +65,7 @@ class Empresa extends Model
             'crt' => 'integer',
             'nfce_serie' => 'integer',
             'nfce_ultimo_numero' => 'integer',
+            'nfse_dps_ultimo_numero' => 'integer',
             'nfce_ambiente' => 'integer',
         ];
     }

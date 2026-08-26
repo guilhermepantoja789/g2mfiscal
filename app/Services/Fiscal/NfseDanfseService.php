@@ -77,11 +77,11 @@ class NfseDanfseService
         ];
         $regimeTrib = $regimesMap[$empresa->regime_tributario ?? 3] ?? 'Simples Nacional';
 
-        $aliquotaIss = (float) ($nota->aliquota_iss > 0 ? $nota->aliquota_iss : $nota->p_tot_trib_mun);
+        $aliquotaIss = $nota->aliquotaIssEfetiva();
         $valorServico = (float) $nota->valor_servico;
-        $valorIss = round($valorServico * $aliquotaIss / 100, 2);
-        $issRetido = ((int) $nota->tp_ret_issqn === 2);
-        $valorLiquido = $issRetido ? ($valorServico - $valorIss) : $valorServico;
+        $valorIss = $nota->calcularValorIss();
+        $issRetido = $nota->issRetido();
+        $valorLiquido = $nota->calcularValorLiquido();
 
         $tribIssqnMap = [
             1 => 'Tributável',

@@ -30,7 +30,7 @@ class FinanceiroService
                 'cliente_id'     => $nota->cliente_id,
                 'nota_fiscal_id' => $nota->id,
 
-                'valor'          => $nota->valor_liquido ?? $nota->valor_servico, // Usa o líquido se houver retenção
+                'valor'          => $nota->calcularValorLiquido(),
 
                 'vencimento'     => $vencimento,
                 'status'         => 'RASCUNHO', // <--- CORREÇÃO: Nasce inativa (cinza)
@@ -82,7 +82,7 @@ class FinanceiroService
 
             $cobranca->update([
                 'cliente_id'    => $nota->cliente_id, // Caso tenha mudado o cliente
-                'valor'         => $nota->valor_liquido ?? $nota->valor_servico,
+                'valor'         => $nota->calcularValorLiquido(),
                 'vencimento'    => $vencimento,
                 'descricao'     => 'Pré-lançamento ref. NFS-e (Rascunho #' . $nota->id . ')'
             ]);

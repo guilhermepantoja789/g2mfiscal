@@ -36,6 +36,9 @@
                         </div>
                         <p class="text-sm font-medium text-gray-500">
                             ID do Sistema: #{{ $nota->id }} &bull; Criada em {{ $nota->created_at->format('d/m/Y \à\s H:i') }}
+                            @if($nota->numero_dps)
+                                &bull; DPS {{ $nota->numero_dps }} / série {{ \App\Services\NfseAmbiente::serie() }}
+                            @endif
                             @if($nota->documento_comercial_id)
                                 &bull; <a href="{{ route('documentos.show', $nota->documento_comercial_id) }}" class="text-indigo-600 hover:underline">Documento #{{ $nota->documento_comercial_id }}</a>
                             @endif
@@ -215,11 +218,22 @@
                 <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 sticky top-8">
                     <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-6">Resumo Financeiro</h3>
 
+                    <div class="flex justify-between items-center py-2 mb-2">
+                        <span class="text-sm font-medium text-gray-500">Valor do serviço</span>
+                        <span class="text-sm font-bold text-gray-900">R$ {{ number_format($nota->valor_servico, 2, ',', '.') }}</span>
+                    </div>
+                    @if($nota->issRetido())
+                        <div class="flex justify-between items-center py-2 mb-4">
+                            <span class="text-sm font-medium text-amber-700">(-) ISS retido</span>
+                            <span class="text-sm font-bold text-amber-800">R$ {{ number_format($nota->calcularValorIss(), 2, ',', '.') }}</span>
+                        </div>
+                    @endif
+
                     <!-- Valor Principal -->
                     <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100 mb-6">
                         <span class="block text-blue-600 text-sm font-bold mb-1">Valor Líquido do Serviço</span>
                         <span class="block text-4xl font-extrabold text-blue-900 tracking-tight">
-                            R$ {{ number_format($nota->valor_servico, 2, ',', '.') }}
+                            R$ {{ number_format($nota->calcularValorLiquido(), 2, ',', '.') }}
                         </span>
                     </div>
 

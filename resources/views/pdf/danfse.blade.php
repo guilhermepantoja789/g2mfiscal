@@ -531,7 +531,7 @@
 
             @if($servico->iss_retido)
                 <div class="iss-retido-box">
-                    ISS RETIDO PELO TOMADOR — responsável pelo recolhimento de R$ {{ number_format($servico->valor_iss, 2, ',', '.') }}
+                    ISS RETIDO — responsável pelo recolhimento de R$ {{ number_format($servico->valor_iss, 2, ',', '.') }}
                 </div>
             @endif
         </div>

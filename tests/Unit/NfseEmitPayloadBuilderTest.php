@@ -23,7 +23,7 @@ class NfseEmitPayloadBuilderTest extends TestCase
         $nota = $this->makeNota();
         $payload = NfseEmitPayloadBuilder::fromNota($nota);
 
-        $this->assertSame($nota->id, $payload['numero']);
+        $this->assertSame((int) $nota->numero_dps, $payload['numero']);
         $this->assertSame(NfseAmbiente::serie(), $payload['serie']);
         $this->assertSame('99', $payload['serie']);
         $this->assertSame('RUA A', $payload['tomador_endereco']);
@@ -72,6 +72,16 @@ class NfseEmitPayloadBuilderTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('código NBS');
+        NfseEmitPayloadBuilder::fromNota($nota->fresh(['cliente', 'servico']));
+    }
+
+    public function test_rejects_missing_numero_dps(): void
+    {
+        $nota = $this->makeNota();
+        $nota->update(['numero_dps' => null]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('nDPS');
         NfseEmitPayloadBuilder::fromNota($nota->fresh(['cliente', 'servico']));
     }
 
@@ -138,6 +148,7 @@ class NfseEmitPayloadBuilderTest extends TestCase
             'tomador_cnpj' => '12345678909',
             'tomador_nome' => 'TOMADOR',
             'valor_servico' => 100,
+            'numero_dps' => 88,
             'descricao' => 'Servico teste',
             'emissao' => now(),
             'trib_issqn' => 1,

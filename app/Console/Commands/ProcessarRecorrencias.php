@@ -128,6 +128,12 @@ class ProcessarRecorrencias extends Command
                     'v_tot_trib_fed' => $vFed,
                     'v_tot_trib_est' => $vEst,
                     'v_tot_trib_mun' => $vMun,
+                    ...\App\Models\NotaFiscal::calcularValores(
+                        $valorServico,
+                        $rec->aliquota_iss ?? 0,
+                        $pMun,
+                        $rec->tp_ret_issqn,
+                    ),
                 ]);
 
                 // Recarrega relacionamentos e casts

@@ -44,8 +44,14 @@ class NfseEmitPayloadBuilder
         $servico = $nota->servico;
         $ibscbs = self::resolveIbscbs($nota, $servico);
 
+        if (blank($nota->numero_dps) || (int) $nota->numero_dps <= 0) {
+            throw new InvalidArgumentException(
+                'Nota sem nDPS reservado. Não é permitido usar o ID interno como número da DPS.'
+            );
+        }
+
         return [
-            'numero' => (int) ($nota->numero_dps ?: $nota->id),
+            'numero' => (int) $nota->numero_dps,
             'serie' => NfseAmbiente::serie(),
             'competencia' => $nota->emissao->format('Y-m-d'),
 

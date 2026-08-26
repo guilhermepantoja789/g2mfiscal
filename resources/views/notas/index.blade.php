@@ -113,7 +113,7 @@
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <div class="text-sm font-extrabold text-gray-900 tracking-tight">
-                                        R$ {{ number_format($nota->valor_servico, 2, ',', '.') }}
+                                        R$ {{ number_format($nota->calcularValorLiquido(), 2, ',', '.') }}
                                     </div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">

@@ -476,6 +476,12 @@ class DocumentoOrchestrator
                 'trib_issqn' => '1',
                 'tp_ret_issqn' => '1',
                 'aliquota_iss' => 0,
+                ...\App\Models\NotaFiscal::calcularValores(
+                    (float) $documento->valor_total,
+                    0,
+                    0,
+                    '1',
+                ),
                 'fin_nfse' => $servico->fin_nfse ?: NfseIbscbsBuilder::DEFAULT_FIN_NFSE,
                 'c_ind_op' => $servico->c_ind_op ?: NfseIbscbsBuilder::DEFAULT_C_IND_OP,
                 'cst_ibscbs' => $servico->cst_ibscbs ?: NfseIbscbsBuilder::DEFAULT_CST,

@@ -32,6 +32,8 @@ class NotaFiscal extends Model
 
         // Valores e Serviço
         'valor_servico',
+        'valor_iss',
+        'valor_liquido',
         'descricao',
         'emissao',
 
@@ -58,6 +60,8 @@ class NotaFiscal extends Model
     protected $casts = [
         'emissao' => 'datetime',
         'valor_servico' => 'decimal:2',
+        'valor_iss' => 'decimal:2',
+        'valor_liquido' => 'decimal:2',
         'aliquota_iss' => 'decimal:2',
         'v_tot_trib_fed' => 'decimal:2',
         'v_tot_trib_est' => 'decimal:2',
@@ -106,5 +110,63 @@ class NotaFiscal extends Model
     public function cobranca()
     {
         return $this->hasOne(Cobranca::class, 'nota_fiscal_id');
+    }
+
+    public function issRetido(): bool
+    {
+        return in_array((int) $this->tp_ret_issqn, [2, 3], true);
+    }
+
+    public function aliquotaIssEfetiva(): float
+    {
+        $aliq = (float) $this->aliquota_iss;
+        if ($aliq > 0) {
+            return $aliq;
+        }
+
+        return (float) ($this->p_tot_trib_mun ?? 0);
+    }
+
+    public function calcularValorIss(): float
+    {
+        return round((float) $this->valor_servico * $this->aliquotaIssEfetiva() / 100, 2);
+    }
+
+    public function calcularValorLiquido(): float
+    {
+        $servico = (float) $this->valor_servico;
+
+        return $this->issRetido()
+            ? round($servico - $this->calcularValorIss(), 2)
+            : $servico;
+    }
+
+    /**
+     * @return array{valor_iss: float, valor_liquido: float}
+     */
+    public function valoresCalculados(): array
+    {
+        return [
+            'valor_iss' => $this->calcularValorIss(),
+            'valor_liquido' => $this->calcularValorLiquido(),
+        ];
+    }
+
+    /**
+     * @return array{valor_iss: float, valor_liquido: float}
+     */
+    public static function calcularValores(
+        float $valorServico,
+        mixed $aliquotaIss,
+        mixed $pTotTribMun,
+        mixed $tpRetIssqn,
+    ): array {
+        $nota = new self;
+        $nota->valor_servico = $valorServico;
+        $nota->aliquota_iss = $aliquotaIss;
+        $nota->p_tot_trib_mun = $pTotTribMun;
+        $nota->tp_ret_issqn = $tpRetIssqn;
+
+        return $nota->valoresCalculados();
     }
 }

@@ -115,6 +115,12 @@ class NotaFiscalController extends Controller
                 'tp_ret_issqn' => $data['tp_ret_issqn'],
                 // Garante que a alíquota venha do form ou seja 0
                 'aliquota_iss' => $data['aliquota_iss'] ?? 0,
+                ...\App\Models\NotaFiscal::calcularValores(
+                    (float) $data['valor_servico'],
+                    $data['aliquota_iss'] ?? 0,
+                    $data['p_tot_trib_mun'] ?? 0,
+                    $data['tp_ret_issqn'],
+                ),
 
                 'fin_nfse' => $data['fin_nfse'] ?? null,
                 'ind_final' => $data['ind_final'] ?? null,
@@ -237,6 +243,12 @@ class NotaFiscalController extends Controller
                 'trib_issqn' => $data['trib_issqn'],
                 'tp_ret_issqn' => $data['tp_ret_issqn'],
                 'aliquota_iss' => $data['aliquota_iss'],
+                ...\App\Models\NotaFiscal::calcularValores(
+                    (float) $data['valor_servico'],
+                    $data['aliquota_iss'] ?? 0,
+                    $data['p_tot_trib_mun'] ?? 0,
+                    $data['tp_ret_issqn'],
+                ),
 
                 'fin_nfse' => $data['fin_nfse'] ?? null,
                 'ind_final' => $data['ind_final'] ?? null,
@@ -262,8 +274,7 @@ class NotaFiscalController extends Controller
                 if ($nota->cobranca) {
                     // Já existe: Atualiza valor e vencimento
                     $nota->cobranca->update([
-                        'valor' => $nota->valor_servico,
-                        'valor_liquido' => $nota->valor_servico,
+                        'valor' => $nota->calcularValorLiquido(),
                         'vencimento' => $request->vencimento,
                         // Se estava cancelada ou erro, volta pra rascunho? Geralmente mantém o status atual ou reseta.
                         // Aqui mantemos a lógica simples: atualiza os dados.
